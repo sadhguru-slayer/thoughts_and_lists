@@ -3,13 +3,14 @@ from typing import Optional
 from enum import Enum
 from datetime import datetime
 class ThoughtBase(BaseModel):
-    id:int
-    title:str
-    content:str
+    id: int
+    title: str
+    content: str
+    user_id: int  # add user_id for responses
 
 class ThoughtCreate(BaseModel):
-    title:str
-    content:str
+    title: str
+    content: str
 
 
 class Role(str,Enum):
