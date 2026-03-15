@@ -5,7 +5,7 @@ from .database import SessionLocal, engine, Base
 from contextlib import asynccontextmanager
 from app.database import init_db
 from typing import Annotated
-from app.schema import ThoughtCreate
+from app.schema import ThoughtCreate,ThoughtBase
 from app.dependencies import db_session
 
 
@@ -31,11 +31,16 @@ async def read_thoughts(db: db_session):
 
 @app.post("/thoughts")
 async def add_thought(
-    post:ThoughtCreate,
+    thought:ThoughtCreate,
     db: db_session
 ):
-    return await crud.create_thought(db, post)
+    return await crud.create_thought(db, thought)
 
 @app.delete("/thoughts/{id}")
 async def delete_thought(db: db_session,id: int = Path(..., description="ID of the thought to delete")):
     return await crud.delete_thought(db, id)
+
+@app.patch("/thoughts/{id}")
+async def update_thoughts(db:db_session,thought:ThoughtBase):
+    return await crud.update_thought(db,thought)
+    

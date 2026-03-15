@@ -11,3 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ./app ./app
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Production code
+# services:
+#   app:
+#     build: .
+#     ports:
+#       - "8000:8000"
+#     restart: always
+#     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
