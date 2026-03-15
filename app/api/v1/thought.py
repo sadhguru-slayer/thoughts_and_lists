@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from typing import Annotated
 from sqlalchemy import select
-from . import models
-from app.dependencies import db_session
+from app.models import models
+from app.core.dependencies import db_session
 from app.schema import ThoughtCreate,ThoughtBase
 from fastapi import Form,HTTPException
 
