@@ -6,7 +6,7 @@ from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MIN
 from datetime import timedelta,datetime
 from app.schema import UserCreate,UserOut,Role
 from app.services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed
-from app.models import User,UserRole
+from app.models.models import User,UserRole
 
 import re
 import secrets

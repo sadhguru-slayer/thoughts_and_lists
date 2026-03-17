@@ -1,8 +1,8 @@
 from app.api.v1 import thought,auth
 from fastapi import FastAPI, Depends, HTTPException,Path,Form
 from sqlalchemy.orm import Session
-from . import models
-from .database import SessionLocal, engine, Base
+from app.models import models
+from app.database import SessionLocal, engine, Base
 from contextlib import asynccontextmanager
 from app.database import init_db
 from typing import Annotated
