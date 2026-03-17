@@ -6,7 +6,7 @@ from app.database import SessionLocal, engine, Base
 from contextlib import asynccontextmanager
 from app.database import init_db
 from typing import Annotated
-from app.schema import ThoughtCreate,ThoughtBase
+from app.schema.UserAndThought import ThoughtCreate,ThoughtBase
 from app.core.dependencies import db_session
 from app.api.v1.auth import app as authRouter
 from app.api.v1.thought import app as thoughtRouter
