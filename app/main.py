@@ -10,6 +10,7 @@ from app.schema.UserAndThought import ThoughtCreate,ThoughtBase
 from app.core.dependencies import db_session
 from app.api.v1.auth import app as authRouter
 from app.api.v1.thought import app as thoughtRouter
+from app.api.v1.journal import app as journalRouter
 
 
 @asynccontextmanager
@@ -38,3 +39,8 @@ app.include_router(
     tags=["Thought"]
 )
 
+app.include_router(
+    journalRouter,
+    prefix = "/api/v1",
+    tags=["Journal"]
+)
