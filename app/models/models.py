@@ -40,3 +40,7 @@ class User(Base):
 
 
     thoughts: Mapped[list["Thought"]] = relationship("Thought", back_populates="user", cascade="all, delete-orphan")
+
+    default_template_id: Mapped[int | None] = mapped_column(
+    ForeignKey("section_templates.id"), nullable=True
+    )

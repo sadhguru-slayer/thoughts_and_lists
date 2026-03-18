@@ -83,32 +83,56 @@ class JournalSection(Base):
     __tablename__ = "journal_sections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    journal_id: Mapped[int] = mapped_column(ForeignKey("journals.id"), nullable=False)
-    template_id: Mapped[int] = mapped_column(ForeignKey("section_templates.id"), nullable=False)
+    journal_id: Mapped[int] = mapped_column(
+        ForeignKey("journals.id"), nullable=False
+    )
+
+    # optional reference (for tracking origin)
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("section_templates.id"), nullable=True
+    )
+
+    # ✅ SNAPSHOT
+    name: Mapped[str] = mapped_column(String, nullable=False)
 
     journal: Mapped["Journal"] = relationship(
         "Journal", back_populates="journal_sections"
     )
+
     template: Mapped["SectionTemplate"] = relationship(
-        "SectionTemplate", back_populates="journal_sections"
-    )
-    field_values: Mapped[list["FieldValue"]] = relationship(
-        "FieldValue", back_populates="section", cascade="all, delete-orphan"
+        "SectionTemplate"
     )
 
+    field_values: Mapped[list["FieldValue"]] = relationship(
+        "FieldValue",
+        back_populates="section",
+        cascade="all, delete-orphan"
+    )
 
 class FieldValue(Base):
     __tablename__ = "field_values"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    section_id: Mapped[int] = mapped_column(ForeignKey("journal_sections.id"), nullable=False)
-    field_id: Mapped[int] = mapped_column(ForeignKey("section_fields.id"), nullable=False)
+
+    section_id: Mapped[int] = mapped_column(
+        ForeignKey("journal_sections.id"), nullable=False
+    )
+
+    # optional reference
+    field_id: Mapped[int | None] = mapped_column(
+        ForeignKey("section_fields.id"), nullable=True
+    )
 
     value: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # ✅ SNAPSHOT (MOST IMPORTANT PART)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    field_type: Mapped[str] = mapped_column(String, nullable=False)
 
     section: Mapped["JournalSection"] = relationship(
         "JournalSection", back_populates="field_values"
     )
+
     field: Mapped["SectionField"] = relationship(
-        "SectionField", back_populates="field_values"
+        "SectionField"
     )
