@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from sqlalchemy import Enum as SQLEnum
 
 from sqlalchemy.sql import func
 from sqlalchemy import (
@@ -8,10 +8,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
-from app.models.models import User
 
 
-# Enum for field types
+from enum import Enum
+
 class FieldType(str, Enum):
     TEXT = "text"
     TEXTAREA = "textarea"
@@ -36,6 +36,9 @@ class Journal(Base):
         "JournalSection", back_populates="journal", cascade="all, delete-orphan"
     )
 
+class TemplateStatus(str, Enum):
+    ACTIVE = "active"        # currently in use
+    TERMINATED = "terminated"  # no longer used
 
 class SectionTemplate(Base):
     __tablename__ = 'section_templates'
@@ -46,7 +49,17 @@ class SectionTemplate(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="section_templates")
+    status: Mapped[TemplateStatus] = mapped_column(
+        SQLEnum(TemplateStatus, name="template_status"),
+        default=TemplateStatus.ACTIVE,
+        nullable=False
+    )
+
+    user: Mapped["User"] = relationship(
+    "User",
+    back_populates="section_templates",
+    foreign_keys=[user_id]  # ✅ ADD THIS
+    )
     section_fields: Mapped[list["SectionField"]] = relationship(
         "SectionField",
         back_populates="template",
@@ -62,22 +75,34 @@ class SectionField(Base):
     __tablename__ = "section_fields"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    template_id: Mapped[int] = mapped_column(ForeignKey("section_templates.id"), nullable=False)
+
+    template_id: Mapped[int] = mapped_column(
+        ForeignKey("section_templates.id"),
+        nullable=False
+    )
 
     label: Mapped[str] = mapped_column(String, nullable=False)
-    field_type: Mapped[FieldType] = mapped_column(String, nullable=False)  # Enum
+
+    # ✅ FIXED: proper Enum
+    field_type: Mapped[FieldType] = mapped_column(
+        SQLEnum(FieldType, name="field_type"),
+        nullable=False
+    )
+
     placeholder: Mapped[str] = mapped_column(String, nullable=True)
     required: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    order: Mapped[int] = mapped_column(Integer, default=0)  # ordering field
+    order: Mapped[int] = mapped_column(Integer, default=0)
 
     template: Mapped["SectionTemplate"] = relationship(
-        "SectionTemplate", back_populates="section_fields"
-    )
-    field_values: Mapped[list["FieldValue"]] = relationship(
-        "FieldValue", back_populates="field"
+        "SectionTemplate",
+        back_populates="section_fields"
     )
 
+    field_values: Mapped[list["FieldValue"]] = relationship(
+        "FieldValue",
+        back_populates="field"
+    )
 
 class JournalSection(Base):
     __tablename__ = "journal_sections"
@@ -115,24 +140,24 @@ class FieldValue(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     section_id: Mapped[int] = mapped_column(
-        ForeignKey("journal_sections.id"), nullable=False
+        ForeignKey("journal_sections.id"),
+        nullable=False
     )
 
-    # optional reference
     field_id: Mapped[int | None] = mapped_column(
-        ForeignKey("section_fields.id"), nullable=True
+        ForeignKey("section_fields.id"),
+        nullable=True
     )
 
     value: Mapped[str] = mapped_column(Text, nullable=True)
 
-    # ✅ SNAPSHOT (MOST IMPORTANT PART)
+    # ✅ Snapshot fields (correct design)
     label: Mapped[str] = mapped_column(String, nullable=False)
     field_type: Mapped[str] = mapped_column(String, nullable=False)
 
     section: Mapped["JournalSection"] = relationship(
-        "JournalSection", back_populates="field_values"
+        "JournalSection",
+        back_populates="field_values"
     )
 
-    field: Mapped["SectionField"] = relationship(
-        "SectionField"
-    )
+    field: Mapped["SectionField"] = relationship("SectionField")

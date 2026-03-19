@@ -5,7 +5,7 @@ from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, Fore
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from sqlalchemy.orm import relationship
-from .journal import Journal
+# from .journal import Journal
 
 class Thought(Base):
     __tablename__ = "thoughts"
@@ -31,7 +31,10 @@ class User(Base):
 
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
 
-    role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole, name="user_role"), default=UserRole.USER)
+    role: Mapped[UserRole] = mapped_column(
+        SQLEnum(UserRole, name="user_role"),
+        default=UserRole.USER
+    )
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -39,15 +42,27 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-
-    thoughts: Mapped[list["Thought"]] = relationship("Thought", back_populates="user", cascade="all, delete-orphan")
-
-    default_template_id: Mapped[int | None] = mapped_column(
-    ForeignKey("section_templates.id"), nullable=True
+    thoughts: Mapped[list["Thought"]] = relationship(
+        "Thought",
+        back_populates="user",
+        cascade="all, delete-orphan"
     )
 
     journals: Mapped[list["Journal"]] = relationship(
-    "Journal",
-    back_populates="user",
-    cascade="all, delete-orphan"
+        "Journal",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    # ✅ FIXED: missing relationship
+    section_templates: Mapped[list["SectionTemplate"]] = relationship(
+        "SectionTemplate",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys='SectionTemplate.user_id'  # <-- explicitly tell SQLAlchemy which FK
+    )
+
+    default_template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("section_templates.id"),
+        nullable=True
     )
