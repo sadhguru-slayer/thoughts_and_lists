@@ -1,5 +1,5 @@
 # To run migrations and upgrade head in alembic I use:
-1. docker compose exec app alembic revision --autogenerate -m "add enum, ordering, unique constraint"
+1. docker compose exec app alembic revision --autogenerate -m "wtevr"
 2. docker compose exec app alembic upgrade head
 
 ## Also: 

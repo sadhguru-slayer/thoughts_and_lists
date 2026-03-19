@@ -5,6 +5,7 @@ from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, Fore
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from sqlalchemy.orm import relationship
+from .journal import Journal
 
 class Thought(Base):
     __tablename__ = "thoughts"
@@ -43,4 +44,10 @@ class User(Base):
 
     default_template_id: Mapped[int | None] = mapped_column(
     ForeignKey("section_templates.id"), nullable=True
+    )
+
+    journals: Mapped[list["Journal"]] = relationship(
+    "Journal",
+    back_populates="user",
+    cascade="all, delete-orphan"
     )

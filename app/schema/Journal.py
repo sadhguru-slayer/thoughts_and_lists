@@ -9,9 +9,21 @@ class JournalBase(BaseModel):
     date: datetime = Field(..., description="Date of the journal entry")
     content: Optional[str] = Field(None, description="Main journal content")
 
+from pydantic import model_validator
 
 class JournalCreate(JournalBase):
+    template_id: Optional[int] = None
     sections: Optional[List[JournalSectionCreate]] = None
+
+    @model_validator(mode="after")
+    def validate_input(self):
+        if self.template_id and self.sections:
+            # allowed → filled template
+            return self
+        if not self.template_id and not self.sections and not self.content:
+            raise ValueError("Journal must have content, template_id, or sections")
+
+        return self
 
 
 class JournalResponse(JournalBase):
