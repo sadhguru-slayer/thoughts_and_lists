@@ -65,26 +65,21 @@ async def create_journal(
     db: db_session,
     token: str = Depends(oauth2_scheme)
 ):
-    # 1️⃣ Authenticate user
     current_user = await get_current_user(db, token)
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # 2️⃣ Create the journal
     new_journal = journal.Journal(
         user_id=current_user.id,
         date=data.date,
         content=data.content
     )
     db.add(new_journal)
-    await db.flush()  # Get journal.id
-
+    await db.flush()
     sections_data = data.sections or []
 
-    # 3️⃣ Collect template_ids for all sections upfront
     template_ids = [s.template_id for s in sections_data if s.template_id]
 
-    # 4️⃣ Fetch all template fields in one query
     template_fields_map = defaultdict(list)
     if template_ids:
         result = await db.execute(
@@ -96,7 +91,6 @@ async def create_journal(
         for f in fields:
             template_fields_map[f.template_id].append(f)
 
-    # 5️⃣ Process each section
     for section_data in sections_data:
         section = journal.JournalSection(
             journal_id=new_journal.id,
@@ -104,8 +98,7 @@ async def create_journal(
             name=section_data.name
         )
         db.add(section)
-        await db.flush()  # Get section.id
-
+        await db.flush()
         existing_labels = {fv.label for fv in (section_data.field_values or [])}
 
         # CASE A: Existing template
@@ -142,15 +135,12 @@ async def create_journal(
                 db.add(tf)
                 template_fields.append(tf)
 
-            await db.flush()  # ✅ single flush for all new fields
-
-            # Assign field_ids back to field values
+            await db.flush()
             for fv, tf in zip(section_data.field_values or [], template_fields):
                 fv.field_id = tf.id
 
             section.template_id = new_template.id
 
-        # Insert all user-provided field values
         for fv in section_data.field_values or []:
             db.add(journal.FieldValue(
                 section_id=section.id,
@@ -160,10 +150,8 @@ async def create_journal(
                 value=fv.value
             ))
 
-    # 6️⃣ Commit transaction
     await db.commit()
 
-    # 7️⃣ Refresh and return
     await db.refresh(new_journal)
     return new_journal
 
@@ -173,12 +161,10 @@ async def delete_journal(
     journal_id: int = Path(..., description="ID of the journal to delete"),
     token: str = Depends(oauth2_scheme)
 ):
-    # Get current user
     current_user = await get_current_user(db, token)
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # Ensure journal exists & belongs to user
     result = await db.execute(
         select(journal.Journal)
         .where(journal.Journal.id == journal_id)
@@ -209,8 +195,6 @@ async def delete_journal(
     await db.execute(
         delete(journal.Journal).where(journal.Journal.id == journal_id)
     )
-
-    # Commit the changes
     await db.commit()
 
     return  {"message":"Deleted successfully"}
