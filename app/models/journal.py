@@ -22,7 +22,7 @@ class Journal(Base):
     __tablename__ = 'journals'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False,index=True)
 
     date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=True)
@@ -44,7 +44,7 @@ class SectionTemplate(Base):
     __tablename__ = 'section_templates'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False,index=True)
 
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
@@ -78,7 +78,8 @@ class SectionField(Base):
 
     template_id: Mapped[int] = mapped_column(
         ForeignKey("section_templates.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     label: Mapped[str] = mapped_column(String, nullable=False)
@@ -109,12 +110,12 @@ class JournalSection(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     journal_id: Mapped[int] = mapped_column(
-        ForeignKey("journals.id"), nullable=False
+        ForeignKey("journals.id"), nullable=False,index=True
     )
 
     # optional reference (for tracking origin)
     template_id: Mapped[int | None] = mapped_column(
-        ForeignKey("section_templates.id"), nullable=True
+        ForeignKey("section_templates.id"), nullable=True,index=True
     )
 
     # ✅ SNAPSHOT
@@ -141,12 +142,14 @@ class FieldValue(Base):
 
     section_id: Mapped[int] = mapped_column(
         ForeignKey("journal_sections.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     field_id: Mapped[int | None] = mapped_column(
         ForeignKey("section_fields.id"),
-        nullable=True
+        nullable=True,
+        index=True
     )
 
     value: Mapped[str] = mapped_column(Text, nullable=True)

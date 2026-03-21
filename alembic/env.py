@@ -5,6 +5,8 @@ from sqlalchemy import create_engine
 from alembic import context
 from dotenv import load_dotenv
 from app.database import Base  # your Base
+import app.models.journal
+import app.models.models
 
 # Load .env
 load_dotenv()
