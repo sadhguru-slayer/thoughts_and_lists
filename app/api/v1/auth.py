@@ -4,7 +4,7 @@ from typing import Annotated
 from app.core.dependencies import db_session
 from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MINUTES
 from datetime import timedelta,datetime
-from app.schema import UserCreate,UserOut,Role
+from app.schema.UserAndThought import UserCreate,UserOut,Role
 from app.services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed
 from app.models.models import User,UserRole
 
