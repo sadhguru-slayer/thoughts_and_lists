@@ -3,7 +3,7 @@ from enum import Enum
 from sqlalchemy.sql import func
 from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, ForeignKey,Text
 from sqlalchemy.orm import Mapped, mapped_column
-from app.database import Base
+from database import Base
 from sqlalchemy.orm import relationship
 # from .journal import Journal
 

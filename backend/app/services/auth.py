@@ -1,9 +1,9 @@
 from datetime import datetime,timedelta,timezone
-from app.core.config import pwd_context,oauth2_scheme
+from core.config import pwd_context,oauth2_scheme
 from sqlalchemy import select
-from app.models.models import User,UserRole
+from models.models import User,UserRole
 from datetime import datetime
-from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES,SECRET_KEY,ALGORITHM
+from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,SECRET_KEY,ALGORITHM
 from fastapi import Depends,HTTPException,status
 import jwt
 

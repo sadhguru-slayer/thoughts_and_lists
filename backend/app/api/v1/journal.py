@@ -2,16 +2,16 @@ from sqlalchemy.orm import Session,selectinload
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select,delete
-from app.models import models
-from app.core.dependencies import db_session
-from app.core.config import oauth2_scheme
-from app.schema.UserAndThought import UserOut
-from app.schema.UserAndThought import ThoughtCreate,ThoughtBase
+from models import models
+from core.dependencies import db_session
+from core.config import oauth2_scheme
+from schema.UserAndThought import UserOut
+from schema.UserAndThought import ThoughtCreate,ThoughtBase
 from fastapi import Form,HTTPException, Path, Depends, APIRouter
-from app.services.auth import get_current_user
-from app.schema.Journal import JournalCreate,JournalResponse
-from app.schema.JournalSection import JournalSectionCreate
-from app.models import journal
+from services.auth import get_current_user
+from schema.Journal import JournalCreate,JournalResponse
+from schema.JournalSection import JournalSectionCreate
+from models import journal
 from enum import Enum
 app = APIRouter()
 

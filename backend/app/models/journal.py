@@ -7,7 +7,7 @@ from sqlalchemy import (
     ForeignKey, Text, UniqueConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.database import Base
+from database import Base
 
 
 from enum import Enum
