@@ -9,11 +9,73 @@ from app.schema.UserAndThought import UserOut
 from app.schema.UserAndThought import ThoughtCreate,ThoughtBase
 from fastapi import Form,HTTPException, Path, Depends, APIRouter
 from app.services.auth import get_current_user
-from app.schema.Journal import JournalCreate
+from app.schema.Journal import JournalCreate,JournalResponse
 from app.schema.JournalSection import JournalSectionCreate
 from app.models import journal
 from enum import Enum
 app = APIRouter()
+
+@app.get("/journals",response_model = List[JournalResponse])
+async def get_journals(db:db_session,token:str = Depends(oauth2_scheme)):
+    current_user = await get_current_user(db,token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    result = await db.execute(
+        select(journal.Journal)
+        .where(journal.Journal.user_id == current_user.id)
+        .order_by(journal.Journal.date.desc())
+    )
+    journals = result.scalars().all()
+    return journals
+
+@app.get("/journal/{journal_id}")
+async def get_journal_detail(
+    journal_id: int,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    current_user = await get_current_user(db, token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    result = await db.execute(
+        select(journal.Journal)
+        .options(
+            selectinload(journal.Journal.journal_sections)
+            .selectinload(journal.JournalSection.field_values)
+        )
+        .where(journal.Journal.id == journal_id)
+        .where(journal.Journal.user_id == current_user.id)
+    )
+
+    journal_obj = result.scalar_one_or_none()
+
+    if not journal_obj:
+        raise HTTPException(status_code=404, detail="Journal not found")
+    
+    return {
+        "id": journal_obj.id,
+        "date": journal_obj.date,
+        "content": journal_obj.content,
+        "sections": [
+            {
+                "id": section.id,
+                "name": section.name,
+                "template_id": section.template_id,
+                "field_values": [
+                    {
+                        "id": fv.id,
+                        "label": fv.label,
+                        "field_type": fv.field_type,
+                        "value": fv.value
+                    }
+                    for fv in section.field_values
+                ]
+            }
+            for section in journal_obj.journal_sections
+        ]
+    }
+
+
 
 @app.get("/templates", response_model=List[dict])
 async def get_existing_templates(
