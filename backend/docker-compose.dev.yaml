@@ -3,6 +3,8 @@ services:
     build: .
     volumes:
       - ./app:/app
+      - ./alembic:/alembic
+      - ./alembic.ini:/alembic.ini
     env_file:
       - .env
     ports:

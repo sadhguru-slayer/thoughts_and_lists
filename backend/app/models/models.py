@@ -66,3 +66,6 @@ class User(Base):
         ForeignKey("section_templates.id"),
         nullable=True
     )
+
+    otp_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    otp_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

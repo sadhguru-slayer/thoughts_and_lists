@@ -23,6 +23,7 @@ venv/
 # Docker
 docker-compose.override.yml
 Dockerfile_Dev.txt
+Docker_production.txt
 *.swp
 
 # Alembic / Migrations (optional: keep your migration scripts)

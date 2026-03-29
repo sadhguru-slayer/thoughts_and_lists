@@ -4,9 +4,12 @@ from sqlalchemy import pool
 from sqlalchemy import create_engine
 from alembic import context
 from dotenv import load_dotenv
-from app.database import Base  # your Base
-import app.models.journal
-import app.models.models
+import sys
+sys.path.insert(0, "/app")
+
+from database import Base
+import models.journal
+import models.models
 
 # Load .env
 load_dotenv()

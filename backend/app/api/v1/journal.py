@@ -29,41 +29,74 @@ async def get_journals(db:db_session,token:str = Depends(oauth2_scheme)):
     return journals
 
 
+from datetime import datetime, timedelta
+from collections import defaultdict
+
 @app.get("/journal/analytics")
 async def get_journal_analytics(
     db: db_session,
     token: str = Depends(oauth2_scheme)
 ):
     current_user = await get_current_user(db, token)
-    print(current_user,"----------------")
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # 1️⃣ Total journals
-    total_result = await db.execute(
-        select(func.count(journal.Journal.id))
+    result = await db.execute(
+        select(journal.Journal)
         .where(journal.Journal.user_id == current_user.id)
+        .order_by(journal.Journal.date.desc())
     )
-    total_journals = total_result.scalar()
+    journals = result.scalars().all()
 
-    # 2️⃣ Journals per day
-    daily_result = await db.execute(
-        select(
-            func.date(journal.Journal.date),
-            func.count(journal.Journal.id)
-        )
-        .where(journal.Journal.user_id == current_user.id)
-        .group_by(func.date(journal.Journal.date))
-        .order_by(func.date(journal.Journal.date))
-    )
+    total_journals = len(journals)
+    total_words = sum(len(str(j.content).split()) for j in journals if j.content)
+    
+    daily_map = defaultdict(int)
+    for j in journals:
+        date_str = j.date.strftime("%Y-%m-%d") if hasattr(j.date, 'strftime') else str(j.date)[:10]
+        daily_map[date_str] += 1
+        
+    daily_counts = [{"date": k, "count": v} for k, v in sorted(daily_map.items())]
 
-    daily_counts = [
-        {"date": str(row[0]), "count": row[1]}
-        for row in daily_result.all()
-    ]
-
+    unique_dates = sorted(list(daily_map.keys()), reverse=True)
+    
+    current_streak = 0
+    longest_streak = 0
+    
+    if unique_dates:
+        temp_longest = 1
+        for i in range(len(unique_dates) - 1):
+            d1 = datetime.strptime(unique_dates[i], "%Y-%m-%d")
+            d2 = datetime.strptime(unique_dates[i+1], "%Y-%m-%d")
+            if (d1 - d2).days == 1:
+                temp_longest += 1
+            else:
+                longest_streak = max(longest_streak, temp_longest)
+                temp_longest = 1
+        longest_streak = max(longest_streak, temp_longest)
+        
+        today_date = datetime.utcnow().date()
+        date_candidates = [
+            (today_date + timedelta(days=1)).strftime("%Y-%m-%d"),
+            today_date.strftime("%Y-%m-%d"),
+            (today_date - timedelta(days=1)).strftime("%Y-%m-%d")
+        ]
+        
+        if unique_dates[0] in date_candidates:
+            current_streak = 1
+            for i in range(len(unique_dates) - 1):
+                d1 = datetime.strptime(unique_dates[i], "%Y-%m-%d")
+                d2 = datetime.strptime(unique_dates[i+1], "%Y-%m-%d")
+                if (d1 - d2).days == 1:
+                    current_streak += 1
+                else:
+                    break
+                    
     return {
         "total_journals": total_journals,
+        "total_words": total_words,
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
         "daily_activity": daily_counts
     }
 
