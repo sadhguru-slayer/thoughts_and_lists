@@ -1,5 +1,25 @@
 /** Seed data matching GET /journals and GET /journal/{id} response shapes. */
 
+/**
+ * GET /journal/structure/latest response shape — sections from the user’s last entry,
+ * fields with values cleared for a new draft.
+ */
+export function buildLatestStructureFromTemplates(templates) {
+  return {
+    sections: templates.map((t) => ({
+      name: t.name,
+      template_id: t.id,
+      fields: [...t.fields]
+        .sort((a, b) => a.order - b.order)
+        .map((f) => ({
+          label: f.label,
+          field_type: f.field_type,
+          value: null,
+        })),
+    })),
+  };
+}
+
 /** GET /templates — section definitions for scaffolded journal sections */
 export const initialSectionTemplates = [
   {
