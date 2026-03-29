@@ -6,11 +6,19 @@ class ThoughtBase(BaseModel):
     id: int
     title: str
     content: str
-    user_id: int  # add user_id for responses
+    user_id: int
+    class Config:
+        orm_mode = True
+        from_attributes = True
 
 class ThoughtCreate(BaseModel):
     title: str
     content: str
+
+class ThoughtUpdate(BaseModel):
+    id: Optional[int] = None
+    title: Optional[str] = None
+    content: Optional[str] = None
 
 
 class Role(str,Enum):

@@ -13,18 +13,31 @@ def get_password_hashed(password: str) -> str:
 def verify_password(pwd:str,h_pwd:str)-> bool:
     return pwd_context.verify(pwd,h_pwd)
 
-async def get_user_email(db,email: str):
-    data = await db.execute(select(User).where(User.email == email))
-    user = data.scalar_one_or_none()
+async def get_user_email(db, email: str):
+    result = await db.execute(
+        select(User).where(User.email == email)
+    )
+    user = result.scalars().first()
+    # print("----", user)
     return user
 
 async def get_current_user(db,token:str):
-    payload = jwt.decode(token,SECRET_KEY,algorithms=[ALGORITHM])
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Signature has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
     email = payload.get("sub")
+    if not email:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+        
     user = await db.execute(select(User).where(User.email == email))
-    if not user:
-        raise HTTPException(status_code=401,detail="Invalid token")
-    return user.scalar_one_or_none()
+    user_obj = user.scalar_one_or_none()
+    if not user_obj:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user_obj
 
 async def create_access_token(data:dict, expires_delta:timedelta = None, role:str=None):
     to_encode = data.copy()

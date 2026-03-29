@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session,selectinload
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,delete
+from sqlalchemy import select,delete,func
 from models import models
 from core.dependencies import db_session
 from core.config import oauth2_scheme
@@ -27,6 +27,46 @@ async def get_journals(db:db_session,token:str = Depends(oauth2_scheme)):
     )
     journals = result.scalars().all()
     return journals
+
+
+@app.get("/journal/analytics")
+async def get_journal_analytics(
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    current_user = await get_current_user(db, token)
+    print(current_user,"----------------")
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # 1️⃣ Total journals
+    total_result = await db.execute(
+        select(func.count(journal.Journal.id))
+        .where(journal.Journal.user_id == current_user.id)
+    )
+    total_journals = total_result.scalar()
+
+    # 2️⃣ Journals per day
+    daily_result = await db.execute(
+        select(
+            func.date(journal.Journal.date),
+            func.count(journal.Journal.id)
+        )
+        .where(journal.Journal.user_id == current_user.id)
+        .group_by(func.date(journal.Journal.date))
+        .order_by(func.date(journal.Journal.date))
+    )
+
+    daily_counts = [
+        {"date": str(row[0]), "count": row[1]}
+        for row in daily_result.all()
+    ]
+
+    return {
+        "total_journals": total_journals,
+        "daily_activity": daily_counts
+    }
+
 
 @app.get("/journal/{journal_id}")
 async def get_journal_detail(
@@ -75,13 +115,12 @@ async def get_journal_detail(
         ]
     }
 
-
-
 @app.get("/templates", response_model=List[dict])
 async def get_existing_templates(
     db: db_session,
     token:str = Depends(oauth2_scheme)
 ):
+    print("TOKEN:", token)
     # 1️⃣ Get current user
     current_user= await get_current_user(db, token)
     if not current_user:
@@ -91,7 +130,10 @@ async def get_existing_templates(
     result = await db.execute(
         select(journal.SectionTemplate)
         .options(selectinload(journal.SectionTemplate.section_fields))
-        .where(journal.SectionTemplate.user_id == current_user.id)
+        .where(
+            journal.SectionTemplate.user_id == current_user.id,
+            journal.SectionTemplate.status == journal.TemplateStatus.ACTIVE
+        )
     )
     templates = result.scalars().all()
 
@@ -102,7 +144,6 @@ async def get_existing_templates(
             "id": t.id,
             "name": t.name,
             "description": t.description,
-            # Optional status: active/inactive
             "status": getattr(t, "status", "active"),  
             "fields": [
                 {
@@ -117,6 +158,29 @@ async def get_existing_templates(
         })
 
     return output
+
+@app.delete("/templates/{template_id}")
+async def delete_template(
+    template_id: int,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    current_user = await get_current_user(db, token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
+    result = await db.execute(
+        select(journal.SectionTemplate)
+        .where(journal.SectionTemplate.id == template_id)
+        .where(journal.SectionTemplate.user_id == current_user.id)
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+        
+    template.status = journal.TemplateStatus.TERMINATED
+    await db.commit()
+    return {"message": "Template marked as inactive"}
 
 from collections import defaultdict
 
@@ -133,7 +197,7 @@ async def create_journal(
 
     new_journal = journal.Journal(
         user_id=current_user.id,
-        date=data.date,
+        date=data.date.replace(tzinfo=None),
         content=data.content
     )
     db.add(new_journal)
@@ -172,9 +236,18 @@ async def create_journal(
                         section_id=section.id,
                         field_id=field.id,
                         label=field.label,
-                        field_type=field.field_type.value,
+                        field_type=field.field_type.value if isinstance(field.field_type, Enum) else field.field_type,
                         value=None
                     ))
+            
+            # If the user toggled reusable off for an existing template, mark it inactive.
+            if not getattr(section_data, "reusable", True):
+                db_template = await db.execute(
+                    select(journal.SectionTemplate).where(journal.SectionTemplate.id == section_data.template_id)
+                )
+                template_to_update = db_template.scalar_one_or_none()
+                if template_to_update:
+                    template_to_update.status = journal.TemplateStatus.TERMINATED
 
         # CASE B: Create reusable template
         elif getattr(section_data, "reusable", False):
