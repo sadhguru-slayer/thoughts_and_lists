@@ -75,6 +75,48 @@ async def get_journal_detail(
         ]
     }
 
+@app.get("/journal/structure/latest")
+async def get_latest_journal_structure(
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    current_user = await get_current_user(db, token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    result = await db.execute(
+        select(journal.Journal)
+        .options(
+            selectinload(journal.Journal.journal_sections)
+            .selectinload(journal.JournalSection.field_values)
+        )
+        .where(journal.Journal.user_id == current_user.id)
+        .order_by(journal.Journal.date.desc())
+        .limit(1)
+    )
+
+    latest_journal = result.scalar_one_or_none()
+
+    if not latest_journal:
+        return {"sections": []}
+
+    return {
+        "sections": [
+            {
+                "name": section.name,
+                "template_id": section.template_id,
+                "fields": [
+                    {
+                        "label": fv.label,
+                        "field_type": fv.field_type,
+                        "value": None  # reset value
+                    }
+                    for fv in section.field_values
+                ]
+            }
+            for section in latest_journal.journal_sections
+        ]
+    }
 
 
 @app.get("/templates", response_model=List[dict])

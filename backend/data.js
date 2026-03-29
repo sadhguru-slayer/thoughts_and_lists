@@ -124,9 +124,7 @@ const case3=
 }
 
 
-// case 4
-
-{
+const case4 = {
   "date": "2026-03-22T09:30:00",
   "content": "Reflections and new tasks.",
   "sections": [
@@ -281,3 +279,4 @@ const getJournalDetaislDataBasedOnId = {
 
 
 
+const journalTemplates = {}
