@@ -23,7 +23,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Thoughts API", lifespan=lifespan)
 
-# ✅ ADD THIS BLOCK (CORS CONFIG)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
