@@ -2,6 +2,8 @@ from api.v1 import thought, auth
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 from models import models
+import os
+from dotenv import load_dotenv
 from database import SessionLocal, engine, Base
 from contextlib import asynccontextmanager
 from database import init_db
@@ -23,10 +25,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Thoughts API", lifespan=lifespan)
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# ✅ Configure CORS based on environment
+if ENVIRONMENT == "production":
+    origins = [FRONTEND_URL]
+else:  # development
+    origins = [
+        FRONTEND_URL,
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,6 +45,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(
     authRouter,
