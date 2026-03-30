@@ -6,10 +6,6 @@ from datetime import datetime
 from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,SECRET_KEY,ALGORITHM
 from fastapi import Depends,HTTPException,status
 import jwt
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 def get_password_hashed(password: str) -> str:
     return pwd_context.hash(password)
@@ -18,12 +14,12 @@ def verify_password(pwd:str,h_pwd:str)-> bool:
     return pwd_context.verify(pwd,h_pwd)
 
 async def get_user_email(db, email: str):
-    logger.info(f"------- Attempting to retrieve user by email: {email}")
+    print(f"------- Attempting to retrieve user by email: {email}", flush=True)
     result = await db.execute(
         select(User).where(User.email == email)
     )
     user = result.scalars().first()
-    logger.info(f"------- get_user_email result: {user}")
+    print(f"------- get_user_email result: {user}", flush=True)
     return user
 
 async def get_current_user(db,token:str):
