@@ -8,6 +8,10 @@ __pycache__/
 *.env
 *.env.*    # in case you have .env.production etc.
 
+# Auth code generation and exchange codes
+generate_authcode.py
+exchange.py
+
 # Virtual environments
 venv/
 .env_venv/
