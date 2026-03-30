@@ -28,7 +28,9 @@ Thoughts Team
 """)
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        # Force the connection to use IPv4 to fix "Network is unreachable" error on Railway
+        # Railway instances sometimes fail to route IPv6 packets correctly.
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, source_address=("0.0.0.0", 0)) as server:
             server.set_debuglevel(1) # Enable this temporarily to output verbose SMTP logs to the console
             server.starttls()
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
