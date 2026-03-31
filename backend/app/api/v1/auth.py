@@ -2,9 +2,9 @@ from fastapi import APIRouter,HTTPException,Depends,Form,Header,BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 from core.dependencies import db_session
-from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MINUTES
+from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 from datetime import timedelta,datetime
-from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify
+from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify, ResetPassword
 from services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed
 from models.models import User,UserRole
 
@@ -97,6 +97,91 @@ async def delete_user(email:str,db:db_session):
 
     return {"message":f"Deleted user with Email:{email}"}
 
+from schema.enums import OTPPurpose
+
+@app.post('/request-password-reset')
+async def request_password_reset(data: OTPRequest, background_tasks: BackgroundTasks, db: db_session):
+    user = await get_user_email(db, data.email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    user.otp_code = otp_code
+    user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+
+    await db.commit()
+    print("------------------------",otp_code)
+    background_tasks.add_task(send_otp_email, user.email, otp_code,OTPPurpose.PASSWORD_RESET)
+
+    return {"message": "Password reset OTP sent"}
+
+@app.post('/verify-reset-otp')
+async def verify_reset_otp(data: OTPVerify, db: db_session):
+    user = await get_user_email(db, data.email)
+    print(data.email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+    print(data.otp,"After user")
+
+    if not user.otp_code or not user.otp_expiry:
+        raise HTTPException(status_code=400, detail="OTP not requested")
+    print(data.otp,"After otp not requested")
+
+    if user.otp_code != data.otp:
+        raise HTTPException(status_code=401, detail="Invalid OTP")
+
+    print(data.otp,"After otp Innvalid")
+    now = datetime.utcnow()
+    otp_expiry = user.otp_expiry.replace(tzinfo=None) if user.otp_expiry.tzinfo else user.otp_expiry
+
+    if now > otp_expiry:
+        raise HTTPException(status_code=401, detail="OTP expired")
+    print(data.otp,"After otp expire")
+
+    # ✅ Clear OTP
+    user.otp_code = None
+    user.otp_expiry = None
+    await db.commit()
+
+    # 🔥 Issue RESET TOKEN (NOT ACCESS TOKEN)
+    reset_token = await create_access_token(
+        data={"sub": user.email, "scope": "password_reset"},
+        expires_delta=timedelta(minutes=10),
+        role=user.role
+    )
+
+    print(reset_token,"reset token")
+    return {"reset_token": reset_token}
+
+from pydantic import BaseModel
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+@app.post('/reset-password')
+async def reset_password(
+    payload: ResetPasswordRequest,
+    token: str = Depends(oauth2_scheme),
+    db: db_session = None
+):
+    new_password = payload.new_password
+    ...
+    payload = await verify_token(token)
+
+    if payload.get("scope") != "password_reset":
+        raise HTTPException(status_code=403, detail="Invalid token scope")
+
+    email = payload.get("sub")
+    user = await get_user_email(db, email)
+
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.hashed_password = get_password_hashed(new_password)
+    await db.commit()
+
+    return {"message": "Password reset successful"}
+
+
 @app.post('/request-otp')
 async def request_otp(data: OTPRequest, background_tasks: BackgroundTasks, db: db_session):
     user = await get_user_email(db, data.email)
@@ -112,7 +197,7 @@ async def request_otp(data: OTPRequest, background_tasks: BackgroundTasks, db: d
     
     await db.commit()
     
-    background_tasks.add_task(send_otp_email, user.email, otp_code)
+    background_tasks.add_task(send_otp_email, user.email, otp_code,OTPPurpose.LOGIN)
     return {"message": "OTP sent to your email successfully"}
 
 @app.post('/verify-otp')

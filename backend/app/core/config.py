@@ -19,6 +19,7 @@ GMAIL_CLIENT_SECRET = os.getenv("CLIENT_SECRETE")
 GMAIL_REFRESH_TOKEN = os.getenv("REFRESH_TOKEN")
 GMAIL_ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 GMAIL_PROJECT_ID = os.getenv("PROJECT_ID")
+ENVIRONMENT = os.getenv("ENVIRONMENT")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/v1/auth/token')
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
