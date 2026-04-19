@@ -161,7 +161,9 @@ async def get_latest_journal_structure(
         select(journal.Journal)
         .options(
             selectinload(journal.Journal.journal_sections)
-            .selectinload(journal.JournalSection.field_values)
+            .selectinload(journal.JournalSection.field_values),
+            selectinload(journal.Journal.journal_sections)
+            .selectinload(journal.JournalSection.template)
         )
         .where(journal.Journal.user_id == current_user.id)
         .order_by(journal.Journal.date.desc())
@@ -173,22 +175,28 @@ async def get_latest_journal_structure(
     if not latest_journal:
         return {"sections": []}
 
+    active_sections = []
+    for section in latest_journal.journal_sections:
+        if not section.template_id:
+            continue
+        if section.template and section.template.status != journal.TemplateStatus.ACTIVE:
+            continue
+            
+        active_sections.append({
+            "name": section.name,
+            "template_id": section.template_id,
+            "fields": [
+                {
+                    "label": fv.label,
+                    "field_type": fv.field_type,
+                    "value": None  # reset value
+                }
+                for fv in section.field_values
+            ]
+        })
+
     return {
-        "sections": [
-            {
-                "name": section.name,
-                "template_id": section.template_id,
-                "fields": [
-                    {
-                        "label": fv.label,
-                        "field_type": fv.field_type,
-                        "value": None  # reset value
-                    }
-                    for fv in section.field_values
-                ]
-            }
-            for section in latest_journal.journal_sections
-        ]
+        "sections": active_sections
     }
 
 
@@ -307,16 +315,21 @@ async def create_journal(
         # CASE A: Existing template
         if section_data.template_id:
             template_fields = template_fields_map[section_data.template_id]
-            for field in template_fields:
-                if field.label not in existing_labels:
-                    db.add(journal.FieldValue(
-                        section_id=section.id,
-                        field_id=field.id,
-                        label=field.label,
-                        field_type=field.field_type.value if isinstance(field.field_type, Enum) else field.field_type,
-                        value=None
-                    ))
-            
+            max_order = max([f.order for f in template_fields], default=-1) if template_fields else -1
+            for fv in section_data.field_values or []:
+                if not fv.field_id:
+                    max_order += 1
+                    new_tf = journal.SectionField(
+                        template_id=section_data.template_id,
+                        label=fv.label,
+                        field_type=fv.field_type,
+                        order=max_order
+                    )
+                    db.add(new_tf)
+                    await db.flush()
+                    fv.field_id = new_tf.id
+                    template_fields.append(new_tf)
+
             # If the user toggled reusable off for an existing template, mark it inactive.
             if not getattr(section_data, "reusable", True):
                 db_template = await db.execute(

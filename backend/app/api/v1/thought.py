@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
-from typing import Annotated
+from typing import Annotated, List
 from sqlalchemy import select
 from models import models
 from core.dependencies import db_session
 from core.config import oauth2_scheme
 from schema.UserAndThought import UserOut
-from schema.UserAndThought import ThoughtCreate,ThoughtBase,ThoughtUpdate
-from fastapi import Form,HTTPException, Path, Depends
+from schema.UserAndThought import ThoughtCreate, ThoughtBase, ThoughtUpdate, BulkDeleteThoughts
+from fastapi import Form, HTTPException, Path, Depends
 from services.auth import get_current_user
 
 async def get_thoughts(db: db_session, user: UserOut):
@@ -68,6 +68,20 @@ async def update_thought(db: db_session, id: int, thought_data: ThoughtUpdate, u
 
     return {"message": "Thought updated successfully", "thought": db_thought}
 
+
+async def bulk_delete_thoughts(db: db_session, ids: List[int], user: UserOut):
+    result = await db.execute(
+        select(models.Thought).where(
+            models.Thought.id.in_(ids),
+            models.Thought.user_id == user.id
+        )
+    )
+    thoughts = result.scalars().all()
+    for thought in thoughts:
+        await db.delete(thought)
+    await db.commit()
+    return {"message": f"{len(thoughts)} thought(s) deleted successfully."}
+
 from fastapi import APIRouter
 
 app = APIRouter()
@@ -116,3 +130,15 @@ async def update_thoughts(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
     return await update_thought(db, id, thought, user)
+
+
+@app.post("/thoughts/bulk-delete")
+async def bulk_delete(
+    payload: BulkDeleteThoughts,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    user = await get_current_user(db, token)
+    if not user:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    return await bulk_delete_thoughts(db, payload.ids, user)

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 from datetime import datetime
 class ThoughtBase(BaseModel):
@@ -19,6 +19,10 @@ class ThoughtUpdate(BaseModel):
     id: Optional[int] = None
     title: Optional[str] = None
     content: Optional[str] = None
+
+
+class BulkDeleteThoughts(BaseModel):
+    ids: List[int]
 
 
 class Role(str,Enum):
