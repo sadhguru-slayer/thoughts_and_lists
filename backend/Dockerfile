@@ -9,4 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ./app ./app
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Set Python path so imports work as in local
+ENV PYTHONPATH=/app
+
+# Run Gunicorn with Uvicorn worker
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8080", "--workers", "1", "--max-requests", "500", "--max-requests-jitter", "50", "--timeout", "60", "--graceful-timeout", "30", "--worker-tmp-dir", "/dev/shm"]
