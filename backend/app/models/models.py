@@ -15,6 +15,12 @@ class Thought(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     user: Mapped["User"] = relationship("User", back_populates="thoughts")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), server_default=func.now(), onupdate=func.now()
+    )
 
 class UserRole(str, Enum):
     USER = "user"
@@ -39,7 +45,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), default=func.now(), server_default=func.now()
     )
 
     thoughts: Mapped[list["Thought"]] = relationship(

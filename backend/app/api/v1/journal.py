@@ -9,7 +9,7 @@ from schema.UserAndThought import UserOut
 from schema.UserAndThought import ThoughtCreate,ThoughtBase
 from fastapi import Form,HTTPException, Path, Depends, APIRouter
 from services.auth import get_current_user
-from schema.Journal import JournalCreate,JournalResponse
+from schema.Journal import JournalCreate, JournalResponse, JournalUpdate
 from schema.JournalSection import JournalSectionCreate
 from models import journal
 from enum import Enum
@@ -41,22 +41,72 @@ async def get_journal_analytics(
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    result = await db.execute(
+    journal_result = await db.execute(
         select(journal.Journal)
         .where(journal.Journal.user_id == current_user.id)
         .order_by(journal.Journal.date.desc())
     )
-    journals = result.scalars().all()
+    journals = journal_result.scalars().all()
+    thought_result = await db.execute(
+        select(models.Thought).where(models.Thought.user_id == current_user.id)
+    )
+    thoughts = thought_result.scalars().all()
 
     total_journals = len(journals)
     total_words = sum(len(str(j.content).split()) for j in journals if j.content)
     
-    daily_map = defaultdict(int)
+    daily_map = defaultdict(
+        lambda: {
+            "journal_created": 0,
+            "journal_edited": 0,
+            "thought_created": 0,
+            "thought_edited": 0,
+        }
+    )
+
+    def _to_day_str(dt_value):
+        if not dt_value:
+            return None
+        if hasattr(dt_value, "strftime"):
+            return dt_value.strftime("%Y-%m-%d")
+        return str(dt_value)[:10]
+
+    def _add_counter(day_str, key):
+        if not day_str:
+            return
+        daily_map[day_str][key] += 1
+
     for j in journals:
-        date_str = j.date.strftime("%Y-%m-%d") if hasattr(j.date, 'strftime') else str(j.date)[:10]
-        daily_map[date_str] += 1
-        
-    daily_counts = [{"date": k, "count": v} for k, v in sorted(daily_map.items())]
+        created_day = _to_day_str(getattr(j, "created_at", None) or j.date)
+        edited_day = _to_day_str(getattr(j, "updated_at", None))
+        _add_counter(created_day, "journal_created")
+        if edited_day and edited_day != created_day:
+            _add_counter(edited_day, "journal_edited")
+
+    for t in thoughts:
+        created_day = _to_day_str(getattr(t, "created_at", None))
+        edited_day = _to_day_str(getattr(t, "updated_at", None))
+        _add_counter(created_day, "thought_created")
+        if edited_day and edited_day != created_day:
+            _add_counter(edited_day, "thought_edited")
+
+    daily_counts = []
+    for day in sorted(daily_map.keys()):
+        day_data = daily_map[day]
+        total_actions = (
+            day_data["journal_created"]
+            + day_data["journal_edited"]
+            + day_data["thought_created"]
+            + day_data["thought_edited"]
+        )
+        daily_counts.append(
+            {
+                "date": day,
+                "count": total_actions,
+                "total_actions": total_actions,
+                **day_data,
+            }
+        )
 
     unique_dates = sorted(list(daily_map.keys()), reverse=True)
     
@@ -97,6 +147,7 @@ async def get_journal_analytics(
         "total_words": total_words,
         "current_streak": current_streak,
         "longest_streak": longest_streak,
+        "total_thoughts": len(thoughts),
         "daily_activity": daily_counts
     }
 
@@ -267,9 +318,6 @@ async def delete_template(
     await db.commit()
     return {"message": "Template marked as inactive"}
 
-from collections import defaultdict
-
-
 @app.post("/journal")
 async def create_journal(
     data: JournalCreate,
@@ -379,6 +427,67 @@ async def create_journal(
 
     await db.refresh(new_journal)
     return new_journal
+
+
+@app.patch("/journal/{journal_id}")
+async def update_journal(
+    journal_id: int,
+    data: JournalUpdate,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    current_user = await get_current_user(db, token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    result = await db.execute(
+        select(journal.Journal)
+        .options(
+            selectinload(journal.Journal.journal_sections)
+            .selectinload(journal.JournalSection.field_values)
+        )
+        .where(journal.Journal.id == journal_id)
+        .where(journal.Journal.user_id == current_user.id)
+    )
+    journal_obj = result.scalar_one_or_none()
+    if not journal_obj:
+        raise HTTPException(status_code=404, detail="Journal not found")
+
+    has_updates = False
+    if data.date is not None:
+        journal_obj.date = data.date.replace(tzinfo=None)
+        has_updates = True
+    if data.content is not None:
+        journal_obj.content = data.content
+        has_updates = True
+
+    section_map = {section.id: section for section in journal_obj.journal_sections}
+    for section_data in data.sections or []:
+        db_section = section_map.get(section_data.id)
+        if not db_section:
+            raise HTTPException(status_code=404, detail=f"Section {section_data.id} not found in journal")
+
+        if section_data.name is not None:
+            db_section.name = section_data.name
+            has_updates = True
+
+        field_map = {fv.id: fv for fv in db_section.field_values}
+        for field_data in section_data.field_values or []:
+            db_field = field_map.get(field_data.id)
+            if not db_field:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Field value {field_data.id} not found in section {section_data.id}",
+                )
+            db_field.value = field_data.value
+            has_updates = True
+
+    if has_updates:
+        journal_obj.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(journal_obj)
+    return {"message": "Journal updated successfully"}
 
 @app.delete("/journal/{journal_id}")
 async def delete_journal(

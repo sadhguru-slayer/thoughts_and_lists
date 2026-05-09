@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional,List
+from typing import Optional, List
 
 from pydantic import BaseModel, Field
 from .JournalSection import JournalSectionCreate
@@ -33,3 +33,20 @@ class JournalResponse(JournalBase):
 
     class Config:
         from_attributes = True
+
+
+class FieldValueUpdate(BaseModel):
+    id: int
+    value: Optional[str] = None
+
+
+class JournalSectionUpdate(BaseModel):
+    id: int
+    name: Optional[str] = None
+    field_values: List[FieldValueUpdate] = []
+
+
+class JournalUpdate(BaseModel):
+    date: Optional[datetime] = None
+    content: Optional[str] = None
+    sections: List[JournalSectionUpdate] = []
