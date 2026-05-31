@@ -11,6 +11,30 @@ class ThoughtBase(BaseModel):
         orm_mode = True
         from_attributes = True
 
+
+class ThoughtSummary(BaseModel):
+    id: int
+    title: str
+    content_preview: str
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ThoughtDetail(BaseModel):
+    id: int
+    title: str
+    content: str
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class ThoughtCreate(BaseModel):
     title: str
     content: str

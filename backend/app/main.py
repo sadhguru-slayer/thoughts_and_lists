@@ -1,20 +1,19 @@
+from contextlib import asynccontextmanager
+
 from api.v1 import thought, auth
 from fastapi import FastAPI
-from sqlalchemy.orm import Session
-from models import models
+from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
-from database import SessionLocal, engine, Base
-from contextlib import asynccontextmanager
 from database import init_db
-from typing import Annotated
-from core.dependencies import db_session
 from api.v1.auth import app as authRouter
 from api.v1.thought import app as thoughtRouter
 from api.v1.journal import app as journalRouter
+load_dotenv()
 
-# ✅ ADD THIS
-from fastapi.middleware.cors import CORSMiddleware
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+IS_DEVELOPMENT = ENVIRONMENT == "development"
 
 
 @asynccontextmanager
@@ -23,12 +22,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Thoughts API", lifespan=lifespan)
+app = FastAPI(
+    title="Thoughts API",
+    lifespan=lifespan,
+    docs_url="/docs" if IS_DEVELOPMENT else None,
+    redoc_url="/redoc" if IS_DEVELOPMENT else None,
+    openapi_url="/openapi.json" if IS_DEVELOPMENT else None,
+)
 
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-# ✅ Configure CORS based on environment
+# Configure CORS based on environment
 if ENVIRONMENT == "production":
     origins = [FRONTEND_URL]
 else:  # development

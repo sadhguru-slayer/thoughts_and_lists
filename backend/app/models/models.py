@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from sqlalchemy.sql import func
-from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, ForeignKey,Text
+from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, ForeignKey, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 from sqlalchemy.orm import relationship
@@ -9,6 +9,9 @@ from sqlalchemy.orm import relationship
 
 class Thought(Base):
     __tablename__ = "thoughts"
+    __table_args__ = (
+        Index("ix_thoughts_user_id_id", "user_id", "id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String, index=True, nullable=False)

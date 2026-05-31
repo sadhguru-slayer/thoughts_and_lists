@@ -1,5 +1,6 @@
 from datetime import datetime,timedelta,timezone
 from core.config import pwd_context,oauth2_scheme
+from core.dependencies import db_session
 from sqlalchemy import select
 from models.models import User,UserRole
 from datetime import datetime
@@ -39,6 +40,13 @@ async def get_current_user(db,token:str):
     if not user_obj:
         raise HTTPException(status_code=401, detail="User not found")
     return user_obj
+
+
+async def get_current_admin_user(db: db_session, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(db, token)
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 async def create_access_token(data:dict, expires_delta:timedelta = None, role:str=None):
     to_encode = data.copy()

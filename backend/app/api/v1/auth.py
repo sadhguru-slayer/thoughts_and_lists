@@ -5,7 +5,7 @@ from core.dependencies import db_session
 from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 from datetime import timedelta,datetime
 from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify, ResetPassword
-from services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed
+from services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed,get_current_admin_user
 from models.models import User,UserRole
 
 from services.email import send_otp_email
@@ -88,14 +88,20 @@ async def refresh_token(refresh_token:Annotated[str,Header(...,title="Refresh To
 
 # Admin actions
 @app.delete('/delete-user')
-async def delete_user(email:str,db:db_session):
-    user = await get_user_email(db,email)
+async def delete_user(
+    email: str,
+    db: db_session,
+    admin: User = Depends(get_current_admin_user),
+):
+    user = await get_user_email(db, email)
     if not user:
-        raise HTTPException(status_code = 404, detail = f"User not found with mail {email}")
+        raise HTTPException(status_code=404, detail=f"User not found with mail {email}")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own admin account")
     await db.delete(user)
     await db.commit()
 
-    return {"message":f"Deleted user with Email:{email}"}
+    return {"message": f"Deleted user with Email:{email}"}
 
 from schema.enums import OTPPurpose
 
