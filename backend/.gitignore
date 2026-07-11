@@ -11,6 +11,7 @@ __pycache__/
 # Auth code generation and exchange codes
 generate_authcode.py
 exchange.py
+deploy.txt
 
 # Virtual environments
 venv/

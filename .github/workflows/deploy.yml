@@ -1,46 +1,53 @@
 name: Deploy to OCI
 
 on:
-push:
-branches:
-- master
+  push:
+    branches:
+      - master
 
 jobs:
-deploy:
-runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  - name: Deploy to Oracle Cloud VM
-    uses: appleboy/ssh-action@v1.0.3
-    with:
-      host: ${{ secrets.OCI_HOST }}
-      username: ${{ secrets.OCI_USERNAME }}
-      key: ${{ secrets.OCI_SSH_KEY }}
-      port: 22
-      script: |
-        set -e
+    steps:
+      - name: Deploy to Oracle Cloud VM
+        uses: appleboy/ssh-action@v1.0.3
 
-        echo "Connected to OCI server"
-        whoami
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USERNAME }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          port: 22
 
-        echo "Moving to project directory"
-        cd ~/thoughts_and_lists
+          script: |
+            set -e
 
-        echo "Fetching latest code"
-        git fetch origin
+            echo "Connected to OCI server"
+            whoami
+            pwd
 
-        echo "Resetting server code to master"
-        git reset --hard origin/master
+            echo "Moving to project directory"
+            cd ~/thoughts_and_lists
 
-        echo "Moving to backend directory"
-        cd backend
+            echo "Current branch:"
+            git branch
 
-        echo "Building and starting containers"
-        docker compose -f docker-compose.dev.yaml up -d --build
+            echo "Fetching latest code"
+            git fetch origin
 
-        echo "Checking running containers"
-        docker compose -f docker-compose.dev.yaml ps
+            echo "Resetting server code to master"
+            git reset --hard origin/master
 
-        echo "Deployment completed successfully"
-```
+            echo "Latest commit:"
+            git log -1 --oneline
+
+            echo "Moving to backend directory"
+            cd backend
+
+            echo "Building containers"
+            docker compose -f docker-compose.dev.yaml up -d --build
+
+            echo "Running containers"
+            docker compose -f docker-compose.dev.yaml ps
+
+            echo "Deployment completed successfully"
