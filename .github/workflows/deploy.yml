@@ -36,9 +36,6 @@ steps:
         echo "Moving to backend directory"
         cd backend
 
-        echo "Stopping existing containers"
-        docker compose -f docker-compose.dev.yaml down
-
         echo "Building and starting containers"
         docker compose -f docker-compose.dev.yaml up -d --build
 
