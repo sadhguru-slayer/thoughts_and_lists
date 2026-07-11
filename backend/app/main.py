@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
+
+
 app = FastAPI(
     title="Thoughts API",
     lifespan=lifespan,
@@ -30,6 +32,12 @@ app = FastAPI(
     redoc_url="/redoc" if IS_DEVELOPMENT else None,
     openapi_url="/openapi.json" if IS_DEVELOPMENT else None,
 )
+
+from core.redis import redis_client
+
+@app.on_event("startup")
+async def startup():
+    await redis_client.ping()
 
 # Configure CORS based on environment
 if ENVIRONMENT == "production":

@@ -105,60 +105,6 @@ async def delete_user(
 
 from schema.enums import OTPPurpose
 
-@app.post('/request-password-reset')
-async def request_password_reset(data: OTPRequest, background_tasks: BackgroundTasks, db: db_session):
-    user = await get_user_email(db, data.email)
-    if not user:
-        raise HTTPException(status_code=400, detail="User not found")
-
-    otp_code = f"{random.randint(100000, 999999)}"
-    user.otp_code = otp_code
-    user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
-
-    await db.commit()
-    print("------------------------",otp_code)
-    background_tasks.add_task(send_otp_email, user.email, otp_code,OTPPurpose.PASSWORD_RESET)
-
-    return {"message": "Password reset OTP sent"}
-
-@app.post('/verify-reset-otp')
-async def verify_reset_otp(data: OTPVerify, db: db_session):
-    user = await get_user_email(db, data.email)
-    print(data.email)
-    if not user:
-        raise HTTPException(status_code=400, detail="User not found")
-    print(data.otp,"After user")
-
-    if not user.otp_code or not user.otp_expiry:
-        raise HTTPException(status_code=400, detail="OTP not requested")
-    print(data.otp,"After otp not requested")
-
-    if user.otp_code != data.otp:
-        raise HTTPException(status_code=401, detail="Invalid OTP")
-
-    print(data.otp,"After otp Innvalid")
-    now = datetime.utcnow()
-    otp_expiry = user.otp_expiry.replace(tzinfo=None) if user.otp_expiry.tzinfo else user.otp_expiry
-
-    if now > otp_expiry:
-        raise HTTPException(status_code=401, detail="OTP expired")
-    print(data.otp,"After otp expire")
-
-    # ✅ Clear OTP
-    user.otp_code = None
-    user.otp_expiry = None
-    await db.commit()
-
-    # 🔥 Issue RESET TOKEN (NOT ACCESS TOKEN)
-    reset_token = await create_access_token(
-        data={"sub": user.email, "scope": "password_reset"},
-        expires_delta=timedelta(minutes=10),
-        role=user.role
-    )
-
-    print(reset_token,"reset token")
-    return {"reset_token": reset_token}
-
 from pydantic import BaseModel
 class ResetPasswordRequest(BaseModel):
     new_password: str
@@ -187,6 +133,55 @@ async def reset_password(
 
     return {"message": "Password reset successful"}
 
+from services.otp import OTPService
+
+@app.post('/request-password-reset')
+async def request_password_reset(data: OTPRequest, background_tasks: BackgroundTasks, db: db_session):
+    user = await get_user_email(db, data.email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    await OTPService.save(
+        OTPPurpose.PASSWORD_RESET,
+        user.email,
+        otp_code
+    )
+
+    background_tasks.add_task(send_otp_email, user.email, otp_code,OTPPurpose.PASSWORD_RESET)
+
+    return {"message": "Password reset OTP sent"}
+
+@app.post('/verify-reset-otp')
+async def verify_reset_otp(data: OTPVerify, db: db_session):
+    user = await get_user_email(db, data.email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    stored =await OTPService.get(
+        OTPPurpose.PASSWORD_RESET,
+        user.email
+    )
+
+    if not stored:
+        raise HTTPException(400,"OTP Expired or Not Requested")
+    
+    if stored != data.otp:
+        raise HTTPException(401, "Invalid OTP")
+    await OTPService.delete(
+        OTPPurpose.PASSWORD_RESET,
+        user.email
+    )
+
+    # 🔥 Issue RESET TOKEN (NOT ACCESS TOKEN)
+    reset_token = await create_access_token(
+        data={"sub": user.email, "scope": "password_reset"},
+        expires_delta=timedelta(minutes=10),
+        role=user.role
+    )
+
+    return {"reset_token": reset_token}
+
 
 @app.post('/request-otp')
 async def request_otp(data: OTPRequest, background_tasks: BackgroundTasks, db: db_session):
@@ -197,11 +192,11 @@ async def request_otp(data: OTPRequest, background_tasks: BackgroundTasks, db: d
     # Generate 6 digit OTP
     otp_code = f"{random.randint(100000, 999999)}"
     
-    # Set expiry to 10 minutes from now
-    user.otp_code = otp_code
-    user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
-    
-    await db.commit()
+    await OTPService.save(
+        OTPPurpose.LOGIN,
+        user.email,
+        otp_code
+    )
     
     background_tasks.add_task(send_otp_email, user.email, otp_code,OTPPurpose.LOGIN)
     return {"message": "OTP sent to your email successfully"}
@@ -211,29 +206,22 @@ async def verify_otp(data: OTPVerify, db: db_session):
     user = await get_user_email(db, data.email)
     if not user:
         raise HTTPException(status_code=400, detail="User not found")
+
+    stored = await OTPService.get(
+        OTPPurpose.LOGIN,
+        user.email
+    )
+
+    if not stored:
+        raise HTTPException(status_code=400, detail="OTP Expired or Not Requested")
         
-    if not user.otp_code or not user.otp_expiry:
-        raise HTTPException(status_code=400, detail="OTP not requested")
-        
-    if user.otp_code != data.otp:
+    if stored != data.otp:
         raise HTTPException(status_code=401, detail="Invalid OTP")
+    await OTPService.delete(
+        OTPPurpose.LOGIN,
+        user.email
+    )
         
-    # Check expiry but ensure naive/aware datetime handling works. 
-    # Use timezone-naive utcnow() if model doesn't specify tz mapping issues. Wait, SQLAlchemy func.now() was used, so let's check with tzinfo.
-    now = datetime.utcnow()
-    # If the db is timezone-aware and we get an offset-aware datetime out, we need to compare it correctly, 
-    # but let's assume naive or strip tz info.
-    # A safer way to avoid "can't compare offset-naive and offset-aware datetimes":
-    otp_expiry = user.otp_expiry.replace(tzinfo=None) if user.otp_expiry.tzinfo else user.otp_expiry
-    
-    if now > otp_expiry:
-        raise HTTPException(status_code=401, detail="OTP has expired")
-        
-    # Clear OTP after successful verify
-    user.otp_code = None
-    user.otp_expiry = None
-    await db.commit()
-    
     access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = await create_access_token(data={"sub": user.email}, expires_delta=access_expires, role=user.role)
     refresh_expires = timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)

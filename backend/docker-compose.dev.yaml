@@ -11,3 +11,12 @@ services:
       - "8000:8000"
     command: uvicorn main:app --host 0.0.0.0 --reload
     working_dir: /app
+    depends_on:
+      - redis
+  
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
