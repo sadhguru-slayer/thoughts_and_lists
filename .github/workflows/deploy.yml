@@ -1,31 +1,49 @@
 name: Deploy to OCI
 
 on:
-  push:
-    branches:
-      - master # or main, depending on your default branch
+push:
+branches:
+- master
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+deploy:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Deploy to Oracle Cloud VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.OCI_HOST }}
-          username: ${{ secrets.OCI_USERNAME }}
-          key: ${{ secrets.OCI_SSH_KEY }}
-          script: |
-            # 1. Navigate into the git repository folder
-            cd ~/thoughts_and_lists
+```
+steps:
+  - name: Deploy to Oracle Cloud VM
+    uses: appleboy/ssh-action@v1.0.3
+    with:
+      host: ${{ secrets.OCI_HOST }}
+      username: ${{ secrets.OCI_USERNAME }}
+      key: ${{ secrets.OCI_SSH_KEY }}
+      port: 22
+      script: |
+        set -e
 
-            # 2. Force the server to match GitHub (discards local edits on the server)
-            git fetch --all
-            git reset --hard origin/master
+        echo "Connected to OCI server"
+        whoami
 
-            # 3. Navigate into the backend folder where docker-compose is located
-            cd backend
+        echo "Moving to project directory"
+        cd ~/thoughts_and_lists
 
-            # 4. Build and restart the docker containers
-            docker compose -f docker-compose.dev.yaml up -d --build
+        echo "Fetching latest code"
+        git fetch origin
+
+        echo "Resetting server code to master"
+        git reset --hard origin/master
+
+        echo "Moving to backend directory"
+        cd backend
+
+        echo "Stopping existing containers"
+        docker compose -f docker-compose.dev.yaml down
+
+        echo "Building and starting containers"
+        docker compose -f docker-compose.dev.yaml up -d --build
+
+        echo "Checking running containers"
+        docker compose -f docker-compose.dev.yaml ps
+
+        echo "Deployment completed successfully"
+```
