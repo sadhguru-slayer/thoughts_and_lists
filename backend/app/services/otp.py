@@ -10,7 +10,7 @@ class OTPService:
     
     @classmethod
     async def save(cls,purpose,email,otp):
-        print(f"-----------USED REDIS TO SAVE {otp}--------")
+        print(f"-----------USED REDIS TO SAVE--------")
         await redis_client.set(
             cls.key(purpose,email),
             otp,
