@@ -8,7 +8,6 @@ class ThoughtBase(BaseModel):
     content: str
     user_id: int
     class Config:
-        orm_mode = True
         from_attributes = True
 
 
@@ -65,7 +64,6 @@ class UserOut(BaseModel):
     role: str
     created_at: datetime
     class Config:
-        orm_mode = True
         from_attributes = True
 
 class OTPRequest(BaseModel):

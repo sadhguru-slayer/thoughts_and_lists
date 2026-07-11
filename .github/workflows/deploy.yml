@@ -17,15 +17,15 @@ jobs:
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
-            # 1. Navigate IN TO the git repository folder
+            # 1. Navigate into the git repository folder
             cd ~/thoughts_and_lists
 
-            # 2. NOW pull the latest changes from GitHub (must be inside the repo)
-            git pull origin master
+            # 2. Force the server to match GitHub (discards local edits on the server)
+            git fetch --all
+            git reset --hard origin/master
 
             # 3. Navigate into the backend folder where docker-compose is located
             cd backend
 
             # 4. Build and restart the docker containers
-            # ⚠️ UPDATE THIS COMMAND if you use a different docker-compose file for production
             docker compose -f docker-compose.dev.yaml up -d --build

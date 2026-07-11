@@ -9,12 +9,12 @@ from database import init_db
 from api.v1.auth import app as authRouter
 from api.v1.thought import app as thoughtRouter
 from api.v1.journal import app as journalRouter
+from api.v1.tasks import app as taskRouter
 load_dotenv()
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 IS_DEVELOPMENT = ENVIRONMENT == "development"
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -65,4 +65,10 @@ app.include_router(
     journalRouter,
     prefix="/api/v1",
     tags=["Journal"]
+)
+
+app.include_router(
+    taskRouter,
+    prefix="/api/v1",
+    tags=["Task"]
 )

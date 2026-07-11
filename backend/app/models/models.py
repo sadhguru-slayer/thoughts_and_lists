@@ -75,6 +75,11 @@ class User(Base):
         ForeignKey("section_templates.id"),
         nullable=True
     )
+    tasks = relationship(
+        "Task",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     otp_code: Mapped[str | None] = mapped_column(String, nullable=True)
     otp_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
