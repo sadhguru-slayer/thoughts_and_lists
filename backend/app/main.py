@@ -15,6 +15,7 @@ load_dotenv()
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL_2 = os.getenv("FRONTEND_URL_2", "http://localhost:3000")
 IS_DEVELOPMENT = ENVIRONMENT == "development"
 
 @asynccontextmanager
@@ -41,7 +42,7 @@ async def startup():
 
 # Configure CORS based on environment
 if ENVIRONMENT == "production":
-    origins = [FRONTEND_URL]
+    origins = [FRONTEND_URL, FRONTEND_URL_2]
 else:  # development
     origins = [
         FRONTEND_URL,
