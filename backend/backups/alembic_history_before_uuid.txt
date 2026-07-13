@@ -1,0 +1,8 @@
+c4d8e2f91a03 -> 9dde3fa15d29 (head), Created Tasks feature and added related tables
+b9f2e1d44c10 -> c4d8e2f91a03, add thoughts user_id id index
+a21e8c9f10d1 -> b9f2e1d44c10, add created_at to thoughts
+675c28784ace -> a21e8c9f10d1, add updated_at to journals and thoughts
+fa24b163ef6c -> 675c28784ace, wtevr
+f69e703898aa -> fa24b163ef6c, Add OTP fields
+3c60e5befc3b -> f69e703898aa, add fk indexes
+<base> -> 3c60e5befc3b, Inital
