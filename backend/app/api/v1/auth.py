@@ -4,7 +4,7 @@ from typing import Annotated
 from core.dependencies import db_session
 from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 from datetime import timedelta,datetime
-from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify, ResetPassword
+from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify, ResetPassword, RegisterPasswordRequest
 from services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed,get_current_admin_user
 from models.models import User,UserRole
 
@@ -46,26 +46,95 @@ async def token(db:db_session,form_data:Annotated[OAuth2PasswordRequestForm,Depe
     return {"access_token":access_token,"refresh_token":refresh_token,"token_type":"bearer"}
 
 
-@app.post('/register')
-async def register(form_data: UserCreate, db: db_session):
-    user_email = await get_user_email(db, form_data.email)
+@app.post('/request-register-otp')
+async def request_register_otp(data: OTPRequest, background_tasks: BackgroundTasks, db: db_session):
+    user_email = await get_user_email(db, data.email)
     if user_email:
-        raise HTTPException(status_code=400, detail=f"User with the email: {form_data.email} already exists")
+        raise HTTPException(status_code=400, detail=f"User with the email: {data.email} already exists")
 
-    hashed_password = get_password_hashed(form_data.password)
-    username = await generate_unique_username(db, form_data.email)
+    otp_code = f"{random.randint(100000, 999999)}"
+    await OTPService.save(
+        OTPPurpose.REGISTER,
+        data.email,
+        otp_code
+    )
+
+    background_tasks.add_task(send_otp_email, data.email, otp_code, OTPPurpose.REGISTER)
+    return {"message": "Registration OTP sent"}
+
+@app.post('/verify-register-otp')
+async def verify_register_otp(data: OTPVerify, db: db_session):
+    user_email = await get_user_email(db, data.email)
+    if user_email:
+        raise HTTPException(status_code=400, detail=f"User with the email: {data.email} already exists")
+
+    stored = await OTPService.get(
+        OTPPurpose.REGISTER,
+        data.email
+    )
+
+    if not stored:
+        raise HTTPException(400, "OTP Expired or Not Requested")
+    
+    if stored != data.otp:
+        raise HTTPException(401, "Invalid OTP")
+    
+    await OTPService.delete(
+        OTPPurpose.REGISTER,
+        data.email
+    )
+
+    register_token = await create_access_token(
+        data={"sub": data.email, "scope": "register_verify"},
+        expires_delta=timedelta(minutes=10)
+    )
+
+    return {"register_token": register_token}
+
+@app.post('/register')
+async def register(
+    payload: RegisterPasswordRequest,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    token_payload = await verify_token(token)
+
+    if token_payload.get("scope") != "register_verify":
+        raise HTTPException(status_code=403, detail="Invalid token scope")
+
+    email = token_payload.get("sub")
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    user_exists = await get_user_email(db, email)
+    if user_exists:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    hashed_password = get_password_hashed(payload.password)
+    username = await generate_unique_username(db, email)
 
     new_user = User(
         username=username,
         hashed_password=hashed_password,
-        role=UserRole.USER,
-        email=form_data.email
+        role=payload.role or UserRole.USER,
+        email=email
     )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
 
-    return {"message": "User registered successfully", "user": UserOut.from_orm(new_user)}
+    access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = await create_access_token(data={"sub": new_user.email}, expires_delta=access_expires, role=new_user.role)
+    refresh_expires = timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+    refresh_token = await create_refresh_token(data={"sub": new_user.email}, expires_delta=refresh_expires)
+
+    return {
+        "message": "User registered successfully", 
+        "user": UserOut.from_orm(new_user),
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
 
 @app.post('/refresh-token')
 async def refresh_token(refresh_token:Annotated[str,Header(...,title="Refresh Token")],db:db_session):

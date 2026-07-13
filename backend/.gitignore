@@ -12,6 +12,7 @@ __pycache__/
 generate_authcode.py
 exchange.py
 deploy.txt
+scripts/
 
 # Virtual environments
 venv/

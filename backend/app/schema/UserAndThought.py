@@ -77,3 +77,7 @@ class ResetPassword(BaseModel):
     email: str
     otp: str
     new_password: str
+
+class RegisterPasswordRequest(BaseModel):
+    password: str
+    role: Optional[Role] = Role.USER
