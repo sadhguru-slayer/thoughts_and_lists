@@ -63,8 +63,16 @@ class UserOut(BaseModel):
     email: str
     role: str
     created_at: datetime
+    timezone: Optional[str] = "Asia/Kolkata"
+    journal_reminder_active: Optional[bool] = True
+    journal_reminder_time: Optional[str] = "22:00:00"
     class Config:
         from_attributes = True
+
+class UserSettingsUpdate(BaseModel):
+    timezone: Optional[str] = None
+    journal_reminder_active: Optional[bool] = None
+    journal_reminder_time: Optional[str] = None
 
 class OTPRequest(BaseModel):
     email: str

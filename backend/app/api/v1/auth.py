@@ -4,8 +4,8 @@ from typing import Annotated
 from core.dependencies import db_session
 from core.config import ACCESS_TOKEN_EXPIRE_MINUTES,REFRESH_TOKEN_EXPIRE_MINUTES, oauth2_scheme
 from datetime import timedelta,datetime
-from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify, ResetPassword, RegisterPasswordRequest
-from services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed,get_current_admin_user
+from schema.UserAndThought import UserCreate,UserOut,Role,OTPRequest,OTPVerify, ResetPassword, RegisterPasswordRequest, UserSettingsUpdate
+from services.auth import create_access_token,create_refresh_token,verify_token,verify_password,get_user_email,get_password_hashed,get_current_admin_user, get_current_user
 from models.models import User,UserRole
 
 from services.email import send_otp_email
@@ -297,3 +297,40 @@ async def verify_otp(data: OTPVerify, db: db_session):
     refresh_token = await create_refresh_token(data={"sub": user.email}, expires_delta=refresh_expires)
     
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
+@app.get('/me', response_model=UserOut)
+async def get_me(
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    user = await get_current_user(db, token)
+    return UserOut.from_orm(user)
+
+
+@app.patch('/me/settings', response_model=UserOut)
+async def update_settings(
+    payload: UserSettingsUpdate,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    user = await get_current_user(db, token)
+    
+    if payload.timezone is not None:
+        user.timezone = payload.timezone
+    if payload.journal_reminder_active is not None:
+        user.journal_reminder_active = payload.journal_reminder_active
+    if payload.journal_reminder_time is not None:
+        # PostgreSQL TIME column requires a datetime.time object, not a raw string
+        time_str = payload.journal_reminder_time
+        if isinstance(time_str, str):
+            from datetime import time as dt_time
+            parts = time_str.split(":")
+            user.journal_reminder_time = dt_time(int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0)
+        else:
+            user.journal_reminder_time = time_str
+        user.last_journal_reminder_date = None  # Reset so updated reminder time can trigger today
+        
+    await db.commit()
+    await db.refresh(user)
+    return UserOut.from_orm(user)

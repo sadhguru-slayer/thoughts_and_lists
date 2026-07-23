@@ -13,7 +13,33 @@ services:
     working_dir: /app
     depends_on:
       - redis
-  
+
+  celery_worker:
+    build: .
+    volumes:
+      - ./app:/app
+      - ./alembic:/alembic
+      - ./alembic.ini:/alembic.ini
+    env_file:
+      - .env
+    working_dir: /app
+    command: celery -A celery_app worker --loglevel=info
+    depends_on:
+      - redis
+
+  celery_beat:
+    build: .
+    volumes:
+      - ./app:/app
+      - ./alembic:/alembic
+      - ./alembic.ini:/alembic.ini
+    env_file:
+      - .env
+    working_dir: /app
+    command: celery -A celery_app beat --loglevel=info
+    depends_on:
+      - redis
+
   redis:
     image: redis:7-alpine
     container_name: redis

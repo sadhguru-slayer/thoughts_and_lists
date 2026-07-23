@@ -15,13 +15,10 @@ def verify_password(pwd:str,h_pwd:str)-> bool:
     return pwd_context.verify(pwd,h_pwd)
 
 async def get_user_email(db, email: str):
-    print(f"------- Attempting to retrieve user by email: {email}", flush=True)
     result = await db.execute(
         select(User).where(User.email == email)
     )
-    user = result.scalars().first()
-    print(f"------- get_user_email result: {user}", flush=True)
-    return user
+    return result.scalars().first()
 
 async def get_current_user(db,token:str):
     try:

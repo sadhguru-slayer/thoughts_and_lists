@@ -1,11 +1,12 @@
 from datetime import datetime
 from enum import Enum
 from sqlalchemy.sql import func
-from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, ForeignKey, Text, Index
+from sqlalchemy import String, Integer, DateTime, Boolean, Enum as SQLEnum, ForeignKey, Text, Index, Time, Date
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 from sqlalchemy.orm import relationship
 # from .journal import Journal
+from datetime import time, datetime
 
 class Thought(Base):
     __tablename__ = "thoughts"
@@ -83,3 +84,13 @@ class User(Base):
 
     otp_code: Mapped[str | None] = mapped_column(String, nullable=True)
     otp_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Reminders Settings
+    timezone: Mapped[str] = mapped_column(String, default="Asia/Kolkata", server_default="Asia/Kolkata")
+    journal_reminder_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    journal_reminder_time: Mapped[time] = mapped_column(
+        Time,
+        default=time(22, 0),
+        nullable=False,
+    )
+    last_journal_reminder_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)

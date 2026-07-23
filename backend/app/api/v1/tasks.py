@@ -106,12 +106,14 @@ async def create_task(
     task_data: TaskCreate,
     user: UserOut,
 ):
+    reminder_at = task_data.reminder_at or task_data.due_date
     task = Task(
         title=task_data.title,
         description=task_data.description,
         priority=task_data.priority,
         due_date=task_data.due_date,
-        reminder_at=task_data.reminder_at,
+        reminder_at=reminder_at,
+        reminder_sent=False,
         user_id=user.id,
     )
 
@@ -145,6 +147,14 @@ async def update_task(
         )
 
     updates = task_data.model_dump(exclude_unset=True)
+
+    # Sync reminder_at with due_date if due_date is updated and reminder_at wasn't provided
+    if "due_date" in updates and "reminder_at" not in updates:
+        updates["reminder_at"] = updates["due_date"]
+
+    # Reset reminder_sent when reminder_at or due_date changes
+    if "due_date" in updates or "reminder_at" in updates:
+        updates["reminder_sent"] = False
 
     for field, value in updates.items():
         setattr(task, field, value)

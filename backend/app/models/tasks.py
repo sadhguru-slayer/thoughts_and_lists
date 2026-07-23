@@ -83,6 +83,12 @@ class Task(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    
+    reminder_sent: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
 
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

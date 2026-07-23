@@ -256,8 +256,6 @@ async def get_existing_templates(
     db: db_session,
     token:str = Depends(oauth2_scheme)
 ):
-    print("TOKEN:", token)
-    # 1️⃣ Get current user
     current_user= await get_current_user(db, token)
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
