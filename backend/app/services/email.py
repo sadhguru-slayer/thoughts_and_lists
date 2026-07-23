@@ -2,9 +2,7 @@
 
 import base64
 import logging
-import os
 from email.message import EmailMessage
-from email.utils import make_msgid
 from core.config import SMTP_USERNAME, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -23,41 +21,17 @@ _BRAND_GRADIENT  = "linear-gradient(135deg, #6c63ff 0%, #5a52d5 100%)"
 _GITHUB_URL      = "https://github.com/sadhguru-slayer"
 _FOOTER_NOTE     = 'Built with ♥ by <a href="{url}" style="color:#6c63ff;text-decoration:none;" target="_blank">Sadguru</a>'.format(url=_GITHUB_URL)
 
-# Logo file lives next to this module (copied from frontend/public)
-_LOGO_PATH = os.path.join(os.path.dirname(__file__), "memo_logo.jpeg")
-
-def _load_logo_bytes() -> bytes | None:
-    try:
-        with open(_LOGO_PATH, "rb") as f:
-            return f.read()
-    except FileNotFoundError:
-        logger.warning("Memo logo not found at %s — emails will render without it", _LOGO_PATH)
-        return None
-
-
 # ---------------------------------------------------------------------------
 # Shared HTML header/footer snippets
 # ---------------------------------------------------------------------------
 
-def _html_header(icon: str, title: str, subtitle: str = "", logo_cid: str = "") -> str:
-    logo_tag = ""
-    if logo_cid:
-        logo_tag = f"""
-      <div style="text-align:center;margin-bottom:12px;">
-        <img src="cid:{logo_cid}"
-             alt="{_BRAND} logo"
-             width="96" height="96"
-             style="width:96px;height:96px;object-fit:cover;border-radius:16px;
-                    background:#fff;padding:6px;display:inline-block;"/>
-      </div>"""
-
+def _html_header(icon: str, title: str, subtitle: str = "") -> str:
     sub_row = ""
     if subtitle:
         sub_row = f'<div class="header-sub">{subtitle}</div>'
 
     return f"""
       <div class="header">
-        {logo_tag}
         <span class="header-icon">{icon}</span>
         <div class="header-title">{title}</div>
         {sub_row}
@@ -77,7 +51,7 @@ def _html_footer(extra_note: str = "") -> str:
 # OTP Email
 # ---------------------------------------------------------------------------
 
-def generate_email_content(otp_code: str, purpose: OTPPurpose, logo_cid: str = ""):
+def generate_email_content(otp_code: str, purpose: OTPPurpose):
     if purpose == OTPPurpose.LOGIN:
         subject  = f"Your {_BRAND} Login Code"
         title    = "Login Verification"
@@ -94,7 +68,7 @@ def generate_email_content(otp_code: str, purpose: OTPPurpose, logo_cid: str = "
         subtitle = "Use the code below to continue."
         icon     = "✅"
 
-    header = _html_header(icon, title, logo_cid=logo_cid)
+    header = _html_header(icon, title)
     footer = _html_footer(
         f"If you didn't request this, you can safely ignore this email.<br/>"
         f"This is an automated message from {_BRAND}."
@@ -188,8 +162,8 @@ This code expires in 10 minutes. Do not share it with anyone.
 # Reminder Email
 # ---------------------------------------------------------------------------
 
-def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = "🔔", logo_cid: str = "") -> str:
-    header = _html_header(icon, title, subtitle=subtitle, logo_cid=logo_cid)
+def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = "🔔") -> str:
+    header = _html_header(icon, title, subtitle=subtitle)
     footer = _html_footer(
         f"You're receiving this because reminders are enabled in your {_BRAND} settings.<br/>"
         "You can update your preferences anytime from the app."
@@ -269,39 +243,17 @@ def _get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-def _send_via_gmail(
-    to_email: str,
-    subject: str,
-    text_body: str,
-    html_body: str,
-    logo_bytes: bytes | None = None,
-    log_label: str = "Email",
-):
-    """Build a multipart/related message with an optional inline logo attachment."""
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    from email.mime.image import MIMEImage
-
-    # Build multipart/related so the CID image is scoped to the HTML part
-    msg_root = MIMEMultipart("related")
-    msg_root["Subject"] = subject
-    msg_root["From"]    = SMTP_USERNAME
-    msg_root["To"]      = to_email
-
-    alt = MIMEMultipart("alternative")
-    alt.attach(MIMEText(text_body, "plain", "utf-8"))
-    alt.attach(MIMEText(html_body, "html", "utf-8"))
-    msg_root.attach(alt)
-
-    if logo_bytes:
-        img = MIMEImage(logo_bytes, _subtype="jpeg")
-        img.add_header("Content-ID", "<memo_logo>")
-        img.add_header("Content-Disposition", "inline", filename="memo_logo.jpeg")
-        msg_root.attach(img)
+def _send_via_gmail(to_email: str, subject: str, text_body: str, html_body: str, log_label: str = "Email"):
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USERNAME
+    msg["To"] = to_email
+    msg.set_content(text_body)
+    msg.add_alternative(html_body, subtype="html")
 
     service = _get_gmail_service()
-    encoded = base64.urlsafe_b64encode(msg_root.as_bytes()).decode()
-    result  = service.users().messages().send(userId="me", body={"raw": encoded}).execute()
+    encoded = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    result = service.users().messages().send(userId="me", body={"raw": encoded}).execute()
     logger.info("%s sent to %s | ID: %s", log_label, to_email, result.get("id"))
 
 
@@ -321,12 +273,10 @@ def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose):
         logger.error("Gmail credentials not set in .env")
         return
 
-    logo_bytes = _load_logo_bytes()
-    logo_cid   = "memo_logo" if logo_bytes else ""
-    subject, text_body, html_body = generate_email_content(otp_code, purpose, logo_cid=logo_cid)
+    subject, text_body, html_body = generate_email_content(otp_code, purpose)
 
     try:
-        _send_via_gmail(to_email, subject, text_body, html_body, logo_bytes=logo_bytes, log_label="OTP Email")
+        _send_via_gmail(to_email, subject, text_body, html_body, log_label="OTP Email")
     except HttpError as error:
         logger.error("Gmail API error sending OTP: %s", error)
     except Exception as e:
@@ -345,13 +295,11 @@ def send_reminder_email(
         logger.error("Gmail credentials not set in .env")
         return
 
-    logo_bytes = _load_logo_bytes()
-    logo_cid   = "memo_logo" if logo_bytes else ""
-    html_body  = _build_reminder_html(title, subtitle, body_text, icon, logo_cid=logo_cid)
-    text_body  = f"{title}\n{subtitle}\n\n{body_text}\n\n— Built by Sadguru ({_GITHUB_URL}) · {_BRAND}"
+    html_body = _build_reminder_html(title, subtitle, body_text, icon)
+    text_body = f"{title}\n{subtitle}\n\n{body_text}\n\n— Built by Sadguru ({_GITHUB_URL}) · {_BRAND}"
 
     try:
-        _send_via_gmail(to_email, subject, text_body, html_body, logo_bytes=logo_bytes, log_label="Reminder Email")
+        _send_via_gmail(to_email, subject, text_body, html_body, log_label="Reminder Email")
     except HttpError as error:
         logger.error("Gmail API error sending reminder: %s", error)
     except Exception as e:
