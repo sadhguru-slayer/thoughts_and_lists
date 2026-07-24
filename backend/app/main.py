@@ -26,12 +26,17 @@ async def lifespan(app: FastAPI):
 
 
 
+# app = FastAPI(
+#     title="Thoughts API",
+#     lifespan=lifespan,
+#     docs_url="/docs" if IS_DEVELOPMENT else None,
+#     redoc_url="/redoc" if IS_DEVELOPMENT else None,
+#     openapi_url="/openapi.json" if IS_DEVELOPMENT else None,
+# )
+
 app = FastAPI(
     title="Thoughts API",
-    lifespan=lifespan,
-    docs_url="/docs" if IS_DEVELOPMENT else None,
-    redoc_url="/redoc" if IS_DEVELOPMENT else None,
-    openapi_url="/openapi.json" if IS_DEVELOPMENT else None,
+    lifespan=lifespan
 )
 
 from core.redis import redis_client
