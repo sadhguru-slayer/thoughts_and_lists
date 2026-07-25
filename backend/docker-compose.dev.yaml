@@ -52,7 +52,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    mem_limit: 80m
+    mem_limit: 150m
 
   redis:
     image: redis:7-alpine
