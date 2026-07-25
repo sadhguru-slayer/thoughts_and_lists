@@ -9,10 +9,13 @@ services:
       - .env
     ports:
       - "8000:8000"
-    command: uvicorn main:app --host 0.0.0.0 --reload
     working_dir: /app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 250m
 
   celery_worker:
     build: .
@@ -23,9 +26,15 @@ services:
     env_file:
       - .env
     working_dir: /app
-    command: celery -A celery_app worker --loglevel=info
+    command: >
+      celery -A celery_app worker
+      --pool=solo
+      --loglevel=info
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 200m
 
   celery_beat:
     build: .
@@ -36,13 +45,22 @@ services:
     env_file:
       - .env
     working_dir: /app
-    command: celery -A celery_app beat --loglevel=info
+    command: >
+      celery -A celery_app beat
+      --loglevel=info
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 80m
 
   redis:
     image: redis:7-alpine
-    container_name: redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: redis-server --save "" --appendonly no --maxmemory 80mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 100m
