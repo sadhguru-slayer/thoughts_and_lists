@@ -145,7 +145,7 @@ async def get_dashboard_data(
         "recent_journals": [
             {
                 "id": j.id,
-                "title": j.title,
+                "title": j.date.strftime("%b %d, %Y") if j.date else "Journal Entry",
                 "date": j.date,
                 "content_preview": j.content[:150] if j.content else "",
             } for j in recent_journals
