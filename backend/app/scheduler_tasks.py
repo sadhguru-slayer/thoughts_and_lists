@@ -2,22 +2,20 @@ from datetime import datetime, timezone
 import pytz
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import joinedload
-from celery.utils.log import get_task_logger
+import logging
 
-from celery_app import celery
 from database_sync import SessionLocal
 from models.models import User
 from models.journal import Journal
 from models.tasks import Task, TaskStatus
 from services.email import send_reminder_email
 
-logger = get_task_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
-@celery.task
 def check_all_reminders():
     now_utc = datetime.now(timezone.utc)
-    logger.info("[CELERY] check_all_reminders running at UTC %s", now_utc)
+    logger.info(f"[SCHEDULER] check_all_reminders running at UTC {now_utc}")
 
     with SessionLocal() as db:
 
@@ -61,7 +59,7 @@ def check_all_reminders():
                     user.last_journal_reminder_date = local_now.date()
                     continue
 
-                logger.info("[Journal] Sending reminder → %s", user.email)
+                logger.info(f"[Journal] Sending reminder → {user.email}")
                 send_reminder_email(
                     user.email,
                     "Daily Journal Reminder",
@@ -73,7 +71,7 @@ def check_all_reminders():
                 user.last_journal_reminder_date = local_now.date()
 
             except Exception as e:
-                logger.error("[Journal] Error for user %s: %s", user.id, e)
+                print("[Journal] Error for user %s: %s", user.id, e)
 
         # -------------------------
         # Task Reminders

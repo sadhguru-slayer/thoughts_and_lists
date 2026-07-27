@@ -6,10 +6,20 @@ from email.message import EmailMessage
 from core.config import SMTP_USERNAME, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.discovery_cache.base import Cache
 from googleapiclient.errors import HttpError
 from schema.enums import OTPPurpose
 
 logger = logging.getLogger(__name__)
+
+# Suppress the noisy file_cache warning and avoid a remote discovery fetch on every send
+class _MemoryCache(Cache):
+    _data: dict = {}
+    def get(self, url):        return self._data.get(url)
+    def set(self, url, content): self._data[url] = content
+
+# Module-level singleton so the Gmail service is built once and reused
+_gmail_service = None
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +243,9 @@ def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = 
 # ---------------------------------------------------------------------------
 
 def _get_gmail_service():
+    global _gmail_service
+    if _gmail_service is not None:
+        return _gmail_service
     creds = Credentials(
         token=None,
         refresh_token=GMAIL_REFRESH_TOKEN,
@@ -240,7 +253,9 @@ def _get_gmail_service():
         client_secret=GMAIL_CLIENT_SECRET,
         token_uri="https://oauth2.googleapis.com/token",
     )
-    return build("gmail", "v1", credentials=creds)
+    _gmail_service = build("gmail", "v1", credentials=creds, cache=_MemoryCache())
+    logger.info("Gmail service initialised and cached.")
+    return _gmail_service
 
 
 def _send_via_gmail(to_email: str, subject: str, text_body: str, html_body: str, log_label: str = "Email"):

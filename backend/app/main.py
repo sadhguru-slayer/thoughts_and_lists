@@ -18,26 +18,30 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 FRONTEND_URL_2 = os.getenv("FRONTEND_URL_2", "http://localhost:3000")
 IS_DEVELOPMENT = ENVIRONMENT == "development"
 
+from scheduler import start_scheduler, shutdown_scheduler
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    start_scheduler()
     yield
+    shutdown_scheduler()
 
 
 
-
-# app = FastAPI(
-#     title="Thoughts API",
-#     lifespan=lifespan,
-#     docs_url="/docs" if IS_DEVELOPMENT else None,
-#     redoc_url="/redoc" if IS_DEVELOPMENT else None,
-#     openapi_url="/openapi.json" if IS_DEVELOPMENT else None,
-# )
 
 app = FastAPI(
     title="Thoughts API",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if IS_DEVELOPMENT else None,
+    redoc_url="/redoc" if IS_DEVELOPMENT else None,
+    openapi_url="/openapi.json" if IS_DEVELOPMENT else None,
 )
+
+# app = FastAPI(
+#     title="Thoughts API",
+#     lifespan=lifespan
+# )
 
 from core.redis import redis_client
 

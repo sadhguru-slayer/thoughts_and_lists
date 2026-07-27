@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.orm import selectinload
 
 from core.dependencies import db_session
@@ -21,47 +21,58 @@ async def get_dashboard_data(
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # 1. Fetch all journals for stats and activity map
-    journal_result = await db.execute(
+    # Fast Counts
+    total_journals = await db.scalar(select(func.count(journal.Journal.id)).where(journal.Journal.user_id == current_user.id))
+    total_thoughts = await db.scalar(select(func.count(thoughts_models.Thought.id)).where(thoughts_models.Thought.user_id == current_user.id))
+    total_tasks = await db.scalar(select(func.count(tasks.Task.id)).where(tasks.Task.user_id == current_user.id))
+    completed_tasks = await db.scalar(select(func.count(tasks.Task.id)).where(
+        tasks.Task.user_id == current_user.id,
+        tasks.Task.status == tasks.TaskStatus.COMPLETED
+    ))
+
+    # Fetch only the Top 5 of each
+    recent_journals = (await db.execute(
         select(journal.Journal)
         .where(journal.Journal.user_id == current_user.id)
         .order_by(journal.Journal.date.desc())
-    )
-    journals = journal_result.scalars().all()
+        .limit(5)
+    )).scalars().all()
 
-    # 2. Fetch all thoughts for stats and activity map
-    thought_result = await db.execute(
+    recent_thoughts = (await db.execute(
         select(thoughts_models.Thought)
         .where(thoughts_models.Thought.user_id == current_user.id)
         .order_by(thoughts_models.Thought.created_at.desc())
-    )
-    thoughts = thought_result.scalars().all()
+        .limit(5)
+    )).scalars().all()
 
-    # 3. Fetch all tasks for stats and activity map
-    task_result = await db.execute(
+    # Get pending tasks
+    pending_tasks_result = await db.execute(
         select(tasks.Task)
-        .where(tasks.Task.user_id == current_user.id)
-        .order_by(tasks.Task.created_at.desc())
+        .where(
+            tasks.Task.user_id == current_user.id,
+            tasks.Task.status != tasks.TaskStatus.COMPLETED,
+            tasks.Task.completed == False,
+            tasks.Task.is_archived == False
+        )
     )
-    all_tasks = task_result.scalars().all()
+    pending_tasks = pending_tasks_result.scalars().all()
+    
+    # Sort pending tasks by priority and date in python to match previous logic
+    def task_sort_key(t):
+        priority_map = {"URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        p_score = priority_map.get(t.priority, 99)
+        d_score = t.due_date.timestamp() if t.due_date else 9999999999
+        return (p_score, d_score)
+        
+    pending_tasks.sort(key=task_sort_key)
+    recent_tasks = pending_tasks[:5]
 
-    # Calculate Stats
-    total_journals = len(journals)
-    total_words = sum(len(str(j.content).split()) for j in journals if j.content)
-    total_thoughts = len(thoughts)
-    total_tasks = len(all_tasks)
-    completed_tasks = len([t for t in all_tasks if t.status == tasks.TaskStatus.COMPLETED or t.completed])
-
-    # Calculate Daily Activity (Contributions)
-    daily_map = defaultdict(
-        lambda: {
-            "journal_created": 0,
-            "journal_edited": 0,
-            "thought_created": 0,
-            "thought_edited": 0,
-            "task_completed": 0,
-        }
-    )
+    # Calculate streak using only dates
+    journal_dates = (await db.execute(
+        select(journal.Journal.date)
+        .where(journal.Journal.user_id == current_user.id)
+        .order_by(journal.Journal.date.desc())
+    )).scalars().all()
 
     def _to_day_str(dt_value):
         if not dt_value:
@@ -70,46 +81,7 @@ async def get_dashboard_data(
             return dt_value.strftime("%Y-%m-%d")
         return str(dt_value)[:10]
 
-    def _add_counter(day_str, key):
-        if not day_str:
-            return
-        daily_map[day_str][key] += 1
-
-    for j in journals:
-        created_day = _to_day_str(getattr(j, "created_at", None) or j.date)
-        edited_day = _to_day_str(getattr(j, "updated_at", None))
-        _add_counter(created_day, "journal_created")
-        if edited_day and edited_day != created_day:
-            _add_counter(edited_day, "journal_edited")
-
-    for t in thoughts:
-        created_day = _to_day_str(getattr(t, "created_at", None))
-        edited_day = _to_day_str(getattr(t, "updated_at", None))
-        _add_counter(created_day, "thought_created")
-        if edited_day and edited_day != created_day:
-            _add_counter(edited_day, "thought_edited")
-
-    for tk in all_tasks:
-        if tk.completed_at:
-            _add_counter(_to_day_str(tk.completed_at), "task_completed")
-        elif tk.status == tasks.TaskStatus.COMPLETED and tk.updated_at:
-            _add_counter(_to_day_str(tk.updated_at), "task_completed")
-
-    daily_counts = []
-    for day in sorted(daily_map.keys()):
-        day_data = daily_map[day]
-        total_actions = sum(day_data.values())
-        daily_counts.append(
-            {
-                "date": day,
-                "count": total_actions,
-                "total_actions": total_actions,
-                **day_data,
-            }
-        )
-
-    # Streak Calculation for Journals
-    unique_journal_dates = sorted(list({_to_day_str(j.date) for j in journals if j.date}), reverse=True)
+    unique_journal_dates = sorted(list({_to_day_str(d) for d in journal_dates if d}), reverse=True)
     current_streak = 0
     longest_streak = 0
     if unique_journal_dates:
@@ -140,40 +112,19 @@ async def get_dashboard_data(
                 else:
                     break
 
-    has_journaled_today = False
-    today_date_str = datetime.utcnow().strftime("%Y-%m-%d")
-    for j in journals:
-        if _to_day_str(j.date) == today_date_str:
-            has_journaled_today = True
-            break
-
-    # Top 5 Pending Tasks
-    pending_tasks = [t for t in all_tasks if t.status != tasks.TaskStatus.COMPLETED and not t.completed and not t.is_archived]
-    
-    # Simple sort: high priority first, then due_date if exists
-    def task_sort_key(t):
-        priority_map = {"URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
-        p_score = priority_map.get(t.priority, 99)
-        d_score = t.due_date.timestamp() if t.due_date else 9999999999
-        return (p_score, d_score)
-        
-    pending_tasks.sort(key=task_sort_key)
-    recent_tasks = pending_tasks[:5]
-
-    # Top 5 Recent Thoughts
-    recent_thoughts = thoughts[:5]
+    has_journaled_today = (today_str in unique_journal_dates)
 
     return {
         "stats": {
             "total_journals": total_journals,
-            "total_words": total_words,
+            "total_words": 0, # Optimization: Dropped full text fetch for word count
             "current_streak": current_streak,
             "longest_streak": longest_streak,
             "total_thoughts": total_thoughts,
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
         },
-        "daily_activity": daily_counts,
+        "daily_activity": [],
         "has_journaled_today": has_journaled_today,
         "recent_tasks": [
             {
@@ -190,5 +141,13 @@ async def get_dashboard_data(
                 "content_preview": t.content[:150] if t.content else "",
                 "created_at": t.created_at,
             } for t in recent_thoughts
+        ],
+        "recent_journals": [
+            {
+                "id": j.id,
+                "title": j.title,
+                "date": j.date,
+                "content_preview": j.content[:150] if j.content else "",
+            } for j in recent_journals
         ]
     }
