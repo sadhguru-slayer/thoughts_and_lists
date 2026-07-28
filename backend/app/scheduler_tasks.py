@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def check_all_reminders():
     now_utc = datetime.now(timezone.utc)
-    logger.info(f"[SCHEDULER] check_all_reminders running at UTC {now_utc}")
+    # logger.info(f"[SCHEDULER] check_all_reminders running at UTC {now_utc}")
 
     with SessionLocal() as db:
 
@@ -65,7 +65,7 @@ def check_all_reminders():
                     user.last_journal_reminder_date = local_now.date()
                     continue
 
-                logger.info(f"[Journal] Sending reminder → {user.email}")
+                # logger.info(f"[Journal] Sending reminder → {user.email}")
                 send_reminder_email(
                     user.email,
                     "Daily Journal Reminder",
@@ -115,7 +115,7 @@ def check_all_reminders():
 
             if reminder_time <= now_utc:
                 if task.user:
-                    logger.info("[Task] Sending reminder for task #%s → %s", task.id, task.user.email)
+                    # logger.info("[Task] Sending reminder for task #%s → %s", task.id, task.user.email)
                     send_reminder_email(
                         task.user.email,
                         f"Task Reminder: {task.title}",
@@ -129,5 +129,6 @@ def check_all_reminders():
                 task.reminder_sent = True
             else:
                 # logger.info(f"[Task] Task #{task.id} reminder time is in the future, skipping")
+                pass
 
         db.commit()
