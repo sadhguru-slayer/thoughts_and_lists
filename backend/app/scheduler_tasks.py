@@ -41,8 +41,13 @@ def check_all_reminders():
                 if isinstance(time_val, str):
                     time_val = datetime.strptime(time_val[:5], "%H:%M").time()
 
-                if local_now.hour != time_val.hour or local_now.minute != time_val.minute:
-                    # logger.info(f"[Journal] User {user.email} time mismatch: local {local_now.hour}:{local_now.minute} != reminder {time_val.hour}:{time_val.minute}")
+                # Combine today's date with the reminder time to create a full datetime
+                reminder_dt = datetime.combine(local_now.date(), time_val).replace(tzinfo=tz)
+                
+                # If current time is before the reminder time, skip.
+                # If it's past, we proceed (and last_journal_reminder_date prevents duplicates)
+                if local_now < reminder_dt:
+                    # logger.info(f"[Journal] User {user.email} reminder time {reminder_dt} is in the future")
                     continue
 
                 if user.last_journal_reminder_date == local_now.date():
