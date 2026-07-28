@@ -27,11 +27,14 @@ def check_all_reminders():
         ).scalars().all()
 
         for user in users:
+            # logger.info(f"[Journal] Checking user {user.email}")
             if not user.journal_reminder_time:
+                # logger.info(f"[Journal] User {user.email} has no journal_reminder_time")
                 continue
 
             tz = pytz.timezone(user.timezone or "Asia/Kolkata")
             local_now = now_utc.astimezone(tz)
+            # logger.info(f"[Journal] User {user.email} local time: {local_now}")
 
             try:
                 time_val = user.journal_reminder_time
@@ -39,9 +42,11 @@ def check_all_reminders():
                     time_val = datetime.strptime(time_val[:5], "%H:%M").time()
 
                 if local_now.hour != time_val.hour or local_now.minute != time_val.minute:
+                    # logger.info(f"[Journal] User {user.email} time mismatch: local {local_now.hour}:{local_now.minute} != reminder {time_val.hour}:{time_val.minute}")
                     continue
 
                 if user.last_journal_reminder_date == local_now.date():
+                    # logger.info(f"[Journal] User {user.email} already reminded today ({local_now.date()})")
                     continue
 
                 # Skip if journal already written today
@@ -56,6 +61,7 @@ def check_all_reminders():
                 ).scalars().first()
 
                 if journal_today:
+                    # logger.info(f"[Journal] User {user.email} already wrote journal today, skipping reminder")
                     user.last_journal_reminder_date = local_now.date()
                     continue
 
@@ -88,18 +94,24 @@ def check_all_reminders():
         ).scalars().all()
 
         for task in tasks:
+            # logger.info(f"[Task] Checking task #{task.id} '{task.title}' for user {task.user.email if task.user else 'None'}")
             if task.status in (TaskStatus.COMPLETED, TaskStatus.CANCELLED):
+                # logger.info(f"[Task] Task #{task.id} is {task.status}, skipping")
                 continue
             if task.reminder_sent:
+                # logger.info(f"[Task] Task #{task.id} reminder already sent, skipping")
                 continue
 
             reminder_time = task.reminder_at or task.due_date
             if not reminder_time:
+                # logger.info(f"[Task] Task #{task.id} has no reminder_time, skipping")
                 continue
 
             if reminder_time.tzinfo is None:
                 user_tz_str = (task.user.timezone if task.user and task.user.timezone else "Asia/Kolkata")
                 reminder_time = pytz.timezone(user_tz_str).localize(reminder_time).astimezone(timezone.utc)
+            
+            # logger.info(f"[Task] Task #{task.id} reminder time: {reminder_time}, now UTC: {now_utc}")
 
             if reminder_time <= now_utc:
                 if task.user:
@@ -112,6 +124,10 @@ def check_all_reminders():
                         task.description or "You have a task that requires your attention.",
                         icon="✅",
                     )
+                else:
+                    logger.warning(f"[Task] Task #{task.id} has no user, cannot send email")
                 task.reminder_sent = True
+            else:
+                # logger.info(f"[Task] Task #{task.id} reminder time is in the future, skipping")
 
         db.commit()

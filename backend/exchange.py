@@ -8,7 +8,7 @@ load_dotenv(".env")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRETE")
 REDIRECT_URI = "http://localhost"  # Must match what you used to generate the code
-AUTH_CODE = "<Completed>"  # Last edited 30-03-2026
+AUTH_CODE = "4/0AXEQxIAfVmFUkMvwpxdJR3r2o-aAIs5Q62fwxjIER1y4pZCstY2BXGT_QwzKpNCxGCpjTA"  # Last edited 30-03-2026
 
 # Exchange authorization code for tokens
 token_url = "https://oauth2.googleapis.com/token"

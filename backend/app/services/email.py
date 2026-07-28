@@ -280,16 +280,13 @@ from core.config import ENVIRONMENT
 
 
 def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose):
-    if ENVIRONMENT != "production":
-        logger.debug("[DEV] OTP for %s: %s", purpose, otp_code)
-        return
-
+    logger.info("Sending OTP email to %s for purpose %s", to_email, purpose)
     if not GMAIL_CLIENT_ID or not GMAIL_CLIENT_SECRET or not GMAIL_REFRESH_TOKEN:
-        logger.error("Gmail credentials not set in .env")
+        logger.error("Gmail credentials not set in .env (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, or GMAIL_REFRESH_TOKEN missing)")
         return
+    
 
     subject, text_body, html_body = generate_email_content(otp_code, purpose)
-
     try:
         _send_via_gmail(to_email, subject, text_body, html_body, log_label="OTP Email")
     except HttpError as error:
