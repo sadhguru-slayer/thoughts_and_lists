@@ -434,6 +434,11 @@ def send_reminder_email(
 
     elif journal_id:
         cta_url = _journal_url(journal_id)
+        cta_label = cta_label or "Open Journal \u2192"
+    elif "journal" in title.lower():
+        # Fallback for daily journal reminder (creates a new journal)
+        base = (FRONTEND_URL or "https://memo.sadguruchenu.in").rstrip("/")
+        cta_url = f"{base}/journals/write"
         cta_label = cta_label or "Write Today\u2019s Journal \u2192"
 
     # logger.info(
