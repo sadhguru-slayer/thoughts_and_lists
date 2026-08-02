@@ -3,7 +3,7 @@
 import base64
 import logging
 from email.message import EmailMessage
-from core.config import SMTP_USERNAME, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
+from core.config import SMTP_USERNAME, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, FRONTEND_URL
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.discovery_cache.base import Cache
@@ -30,6 +30,21 @@ _BRAND_COLOR     = "#6c63ff"
 _BRAND_GRADIENT  = "linear-gradient(135deg, #6c63ff 0%, #5a52d5 100%)"
 _GITHUB_URL      = "https://github.com/sadhguru-slayer"
 _FOOTER_NOTE     = 'Built with ♥ by <a href="{url}" style="color:#6c63ff;text-decoration:none;" target="_blank">Sadguru</a>'.format(url=_GITHUB_URL)
+
+# ---------------------------------------------------------------------------
+# Frontend deep-link URL builders
+# ---------------------------------------------------------------------------
+
+def _task_url(task_id: int) -> str:
+    """Return the shareable frontend URL that opens a specific task."""
+    base = (FRONTEND_URL or "https://memo.sadguruchenu.in").rstrip("/")
+    return f"{base}/tasks?task={task_id}"
+
+
+def _journal_url(journal_id: int) -> str:
+    """Return the shareable frontend URL that opens a specific journal entry."""
+    base = (FRONTEND_URL or "https://memo.sadguruchenu.in").rstrip("/")
+    return f"{base}/journals/{journal_id}"
 
 # ---------------------------------------------------------------------------
 # Shared HTML header/footer snippets
@@ -172,12 +187,75 @@ This code expires in 10 minutes. Do not share it with anyone.
 # Reminder Email
 # ---------------------------------------------------------------------------
 
-def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = "🔔") -> str:
+def _build_reminder_html(
+    title: str,
+    subtitle: str,
+    body_text: str,
+    icon: str = "\U0001f514",
+    cta_url: str = "",
+    cta_label: str = "",
+    task_title: str = "",
+    is_task: bool = False,
+) -> str:
     header = _html_header(icon, title, subtitle=subtitle)
     footer = _html_footer(
         f"You're receiving this because reminders are enabled in your {_BRAND} settings.<br/>"
         "You can update your preferences anytime from the app."
     )
+
+    # ── Task card: clickable title + description block ──────────────────────
+    if is_task and task_title:
+        if cta_url:
+            title_html = (
+                f'<a href="{cta_url}" target="_blank" '
+                f'style="font-size:18px;font-weight:800;color:#3d35b0;text-decoration:none;'
+                f'line-height:1.3;display:block;word-break:break-word;">'
+                f'\U0001f4cc {task_title}</a>'
+            )
+        else:
+            title_html = (
+                f'<span style="font-size:18px;font-weight:800;color:#3d35b0;line-height:1.3;'
+                f'display:block;word-break:break-word;">\U0001f4cc {task_title}</span>'
+            )
+        desc_html = (
+            f'<p style="margin:10px 0 0;font-size:14px;color:#555;line-height:1.65;">{body_text}</p>'
+            if body_text else ""
+        )
+        view_btn = (
+            f'<div style="margin-top:18px;">'
+            f'<a href="{cta_url}" target="_blank" '
+            f'style="display:inline-block;padding:10px 22px;background:{_BRAND_GRADIENT};'
+            f'color:#fff;font-size:13px;font-weight:700;border-radius:10px;text-decoration:none;'
+            f'letter-spacing:.3px;box-shadow:0 4px 14px rgba(108,99,255,.28);">'
+            f'Open Task \u2192</a></div>'
+        ) if cta_url else ""
+
+        content_html = f"""
+          <div style="background:linear-gradient(135deg,#f7f5ff,#eef0ff);
+               border-left:4px solid {_BRAND_COLOR};border-radius:12px;
+               padding:20px 22px;">
+            {title_html}
+            {desc_html}
+            {view_btn}
+          </div>"""
+    else:
+        # ── Generic message box (journal / other) ──────────────────────────
+        content_html = (
+            f'<div style="background:linear-gradient(135deg,#f7f5ff,#eef0ff);'
+            f'border-left:4px solid {_BRAND_COLOR};border-radius:12px;'
+            f'padding:20px 22px;font-size:15px;color:#333;line-height:1.7;">'
+            f'{body_text}</div>'
+        )
+        # CTA button for journal / generic
+        if cta_url and cta_label:
+            content_html += (
+                f'<div style="text-align:center;margin:22px 0 4px;">'
+                f'<a href="{cta_url}" target="_blank" '
+                f'style="display:inline-block;padding:13px 28px;background:{_BRAND_GRADIENT};'
+                f'color:#fff;font-size:14px;font-weight:700;border-radius:12px;text-decoration:none;'
+                f'letter-spacing:.3px;box-shadow:0 4px 14px rgba(108,99,255,.35);">'
+                f'{cta_label}</a></div>'
+            )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -196,7 +274,6 @@ def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = 
   .header-title{{font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;line-height:1.3}}
   .header-sub{{font-size:14px;color:rgba(255,255,255,.82);margin-top:6px}}
   .body{{padding:32px 28px}}
-  .message-box{{background:linear-gradient(135deg,#f7f5ff,#eeeeff);border-left:4px solid {_BRAND_COLOR};border-radius:10px;padding:18px 20px;font-size:15px;color:#333;line-height:1.7}}
   .divider{{border:none;border-top:1px solid #f0f0f0;margin:24px 0}}
   .footer{{padding:0 0 4px;text-align:center}}
   .footer p{{font-size:12px;color:#bbb;line-height:1.7}}
@@ -208,13 +285,11 @@ def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = 
     .header{{padding:24px 20px 20px}}
     .header-title{{font-size:19px}}
     .body{{padding:24px 20px}}
-    .message-box{{font-size:14px;padding:14px 16px}}
   }}
   @media (prefers-color-scheme:dark){{
     body,.wrap{{background:#0d0d14!important}}
     .card{{background:#1a1a2e!important;box-shadow:0 8px 40px rgba(0,0,0,.5)!important}}
     .body{{background:#1a1a2e!important}}
-    .message-box{{background:linear-gradient(135deg,#16213e,#1a1a38)!important;border-left-color:#6c63ff!important;color:#ccc!important}}
     .divider{{border-color:#2a2a4a!important}}
     .footer p{{color:#555!important}}
   }}
@@ -227,7 +302,7 @@ def _build_reminder_html(title: str, subtitle: str, body_text: str, icon: str = 
       <div class="card">
         {header}
         <div class="body">
-          <div class="message-box">{body_text}</div>
+          {content_html}
           {footer}
         </div>
       </div>
@@ -301,14 +376,41 @@ def send_reminder_email(
     title: str,
     subtitle: str,
     body_text: str,
-    icon: str = "🔔",
+    icon: str = "\U0001f514",
+    task_id: int | None = None,
+    journal_id: int | None = None,
+    cta_label: str = "",
 ):
     if not GMAIL_CLIENT_ID or not GMAIL_CLIENT_SECRET or not GMAIL_REFRESH_TOKEN:
         logger.error("Gmail credentials not set in .env")
         return
 
-    html_body = _build_reminder_html(title, subtitle, body_text, icon)
-    text_body = f"{title}\n{subtitle}\n\n{body_text}\n\n— Built by Sadguru ({_GITHUB_URL}) · {_BRAND}"
+    cta_url = ""
+    is_task = False
+    task_title_for_card = ""
+
+    if task_id:
+        cta_url = _task_url(task_id)
+        cta_label = cta_label or "Open Task \u2192"
+        is_task = True
+        # subtitle is the task.title from the scheduler call
+        task_title_for_card = subtitle
+    elif journal_id:
+        cta_url = _journal_url(journal_id)
+        cta_label = cta_label or "Write Today\u2019s Journal \u2192"
+
+    html_body = _build_reminder_html(
+        title,
+        subtitle,
+        body_text,
+        icon,
+        cta_url=cta_url,
+        cta_label=cta_label,
+        task_title=task_title_for_card,
+        is_task=is_task,
+    )
+    plain_cta = f"\n\nOpen in Memo: {cta_url}" if cta_url else ""
+    text_body = f"{title}\n{subtitle}\n\n{body_text}{plain_cta}\n\n\u2014 Built by Sadguru ({_GITHUB_URL}) \u00b7 {_BRAND}"
 
     try:
         _send_via_gmail(to_email, subject, text_body, html_body, log_label="Reminder Email")

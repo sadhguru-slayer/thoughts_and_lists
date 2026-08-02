@@ -20,6 +20,7 @@ GMAIL_REFRESH_TOKEN = os.getenv("REFRESH_TOKEN") or os.getenv("GMAIL_REFRESH_TOK
 GMAIL_ACCESS_TOKEN = os.getenv("ACCESS_TOKEN") or os.getenv("GMAIL_ACCESS_TOKEN")
 GMAIL_PROJECT_ID = os.getenv("PROJECT_ID") or os.getenv("GMAIL_PROJECT_ID")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://memo.sadguruchenu.in")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/v1/auth/token')
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

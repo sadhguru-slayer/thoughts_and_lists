@@ -77,7 +77,8 @@ def check_all_reminders():
                     "Write Your Journal",
                     "Don't forget to write your progress!",
                     "Every day counts. Keep up the good work and jot down your thoughts today.",
-                    icon="📓",
+                    icon="\U0001f4d3",
+                    cta_label="Write Today\u2019s Journal \u2192",
                 )
                 user.last_journal_reminder_date = local_now.date()
 
@@ -127,7 +128,8 @@ def check_all_reminders():
                         "Task Reminder",
                         task.title,
                         task.description or "You have a task that requires your attention.",
-                        icon="✅",
+                        icon="\u2705",
+                        task_id=task.id,
                     )
                 else:
                     logger.warning(f"[Task] Task #{task.id} has no user, cannot send email")
