@@ -426,8 +426,12 @@ def send_reminder_email(
         cta_url = _task_url(task_id)
         cta_label = cta_label or "Open Task \u2192"
         is_task = True
-        # subtitle is the task.title from the scheduler call
         task_title_for_card = subtitle
+    elif "task" in title.lower():
+        # Fallback: if task_id wasn't passed by scheduler, still treat it as a task email
+        is_task = True
+        task_title_for_card = subtitle
+
     elif journal_id:
         cta_url = _journal_url(journal_id)
         cta_label = cta_label or "Write Today\u2019s Journal \u2192"

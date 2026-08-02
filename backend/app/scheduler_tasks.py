@@ -127,6 +127,7 @@ def check_all_reminders():
                 task.description
                 or "You have a task that requires your attention.",
                 icon="✅",
+                task_id=task.id,
             )
 
             task.reminder_sent = True
