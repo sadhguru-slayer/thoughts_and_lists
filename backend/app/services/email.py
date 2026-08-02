@@ -353,11 +353,11 @@ def _dev_save_html(subject: str, to_email: str, html_body: str, log_label: str) 
 
 
 def _send_via_gmail(to_email: str, subject: str, text_body: str, html_body: str, log_label: str = "Email"):
-    logger.info("==================== EMAIL SEND DEBUG ====================")
-    logger.info("ENVIRONMENT Mode: %s", ENVIRONMENT)
-    logger.info("Subject: %s | To: %s | Label: %s", subject, to_email, log_label)
-    logger.info("Generated HTML Content:\n%s", html_body)
-    logger.info("==========================================================")
+    # logger.info("==================== EMAIL SEND DEBUG ====================")
+    # logger.info("ENVIRONMENT Mode: %s", ENVIRONMENT)
+    # logger.info("Subject: %s | To: %s | Label: %s", subject, to_email, log_label)
+    # logger.info("Generated HTML Content:\n%s", html_body)
+    # logger.info("==========================================================")
 
     # ── Dev mode: write to disk instead of hitting Gmail ──────────────────
     if ENVIRONMENT == "development":
@@ -436,10 +436,10 @@ def send_reminder_email(
         cta_url = _journal_url(journal_id)
         cta_label = cta_label or "Write Today\u2019s Journal \u2192"
 
-    logger.info(
-        "[send_reminder_email] Building email for %s | task_id=%s | journal_id=%s | is_task=%s | cta_url=%s",
-        to_email, task_id, journal_id, is_task, cta_url
-    )
+    # logger.info(
+    #     "[send_reminder_email] Building email for %s | task_id=%s | journal_id=%s | is_task=%s | cta_url=%s",
+    #     to_email, task_id, journal_id, is_task, cta_url
+    # )
 
     html_body = _build_reminder_html(
         title,
