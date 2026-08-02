@@ -51,3 +51,5 @@ Thumbs.db
 
 # Railway
 .railway/
+
+./app/email_previews
