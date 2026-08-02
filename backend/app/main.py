@@ -11,6 +11,7 @@ from api.v1.thought import app as thoughtRouter
 from api.v1.journal import app as journalRouter
 from api.v1.tasks import app as taskRouter
 from api.v1.dashboard import app as dashboardRouter
+from api.v1.dev import app as devRouter
 load_dotenv()
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
@@ -96,4 +97,11 @@ app.include_router(
     dashboardRouter,
     prefix="/api/v1",
     tags=["Dashboard"]
+)
+
+# Dev routes — email preview helpers (safe in prod; just returns 404 if no previews)
+app.include_router(
+    devRouter,
+    prefix="/api/v1",
+    tags=["Dev"],
 )

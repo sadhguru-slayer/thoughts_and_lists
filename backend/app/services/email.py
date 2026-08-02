@@ -2,8 +2,11 @@
 
 import base64
 import logging
+import os
+import pathlib
+import datetime
 from email.message import EmailMessage
-from core.config import SMTP_USERNAME, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, FRONTEND_URL
+from core.config import SMTP_USERNAME, GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, FRONTEND_URL, ENVIRONMENT
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.discovery_cache.base import Cache
@@ -197,7 +200,8 @@ def _build_reminder_html(
     task_title: str = "",
     is_task: bool = False,
 ) -> str:
-    header = _html_header(icon, title, subtitle=subtitle)
+    # For task emails, the title appears in the card body — suppress the header subtitle
+    header = _html_header(icon, title, subtitle="" if is_task else subtitle)
     footer = _html_footer(
         f"You're receiving this because reminders are enabled in your {_BRAND} settings.<br/>"
         "You can update your preferences anytime from the app."
@@ -333,7 +337,32 @@ def _get_gmail_service():
     return _gmail_service
 
 
+# Folder where dev email previews are written (relative to this file's package root)
+_DEV_PREVIEW_DIR = pathlib.Path(__file__).resolve().parent.parent / "email_previews"
+
+
+def _dev_save_html(subject: str, to_email: str, html_body: str, log_label: str) -> str:
+    """Write email HTML to disk and return the file path (dev only)."""
+    _DEV_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_label = log_label.lower().replace(" ", "_")
+    filename = f"{ts}_{safe_label}.html"
+    filepath = _DEV_PREVIEW_DIR / filename
+    filepath.write_text(html_body, encoding="utf-8")
+    return str(filepath)
+
+
 def _send_via_gmail(to_email: str, subject: str, text_body: str, html_body: str, log_label: str = "Email"):
+    # ── Dev mode: write to disk instead of hitting Gmail ──────────────────
+    if ENVIRONMENT == "development":
+        filepath = _dev_save_html(subject, to_email, html_body, log_label)
+        logger.info(
+            "[DEV] %s NOT sent (dev mode). HTML preview saved → %s",
+            log_label, filepath
+        )
+        return
+
+    # ── Production: send via Gmail API ────────────────────────────────────
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = SMTP_USERNAME
@@ -350,8 +379,6 @@ def _send_via_gmail(to_email: str, subject: str, text_body: str, html_body: str,
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-
-from core.config import ENVIRONMENT
 
 
 def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose):
