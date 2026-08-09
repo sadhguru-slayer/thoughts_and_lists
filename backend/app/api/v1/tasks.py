@@ -38,7 +38,15 @@ async def get_tasks(
     search: str | None = None,
     archived: bool = False,
 ):
-    query = select(Task).where(
+    query = select(
+        Task.uuid,
+        Task.title,
+        Task.status,
+        Task.priority,
+        Task.completed,
+        Task.due_date,
+        Task.created_at,
+    ).where(
         Task.user_id == user.id,
         Task.is_archived == archived,
     )
@@ -79,8 +87,20 @@ async def get_tasks(
     query = query.order_by(Task.position.asc())
 
     result = await db.execute(query)
+    rows = result.all()
 
-    return result.scalars().all()
+    return [
+        TaskSummary(
+            uuid=row.uuid,
+            title=row.title,
+            status=row.status,
+            priority=row.priority,
+            completed=row.completed,
+            due_date=row.due_date,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 async def get_task(db: db_session, task_uuid: UUID, user: UserOut):
