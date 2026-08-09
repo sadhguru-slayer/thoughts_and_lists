@@ -2,8 +2,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 from enum import Enum
 from datetime import datetime
+from uuid import UUID
+
 class ThoughtBase(BaseModel):
-    id: int
+    uuid: UUID
     title: str
     content: str
     user_id: int
@@ -12,7 +14,7 @@ class ThoughtBase(BaseModel):
 
 
 class ThoughtSummary(BaseModel):
-    id: int
+    uuid: UUID
     title: str
     content_preview: str
     user_id: int
@@ -24,7 +26,7 @@ class ThoughtSummary(BaseModel):
 
 
 class ThoughtDetail(BaseModel):
-    id: int
+    uuid: UUID
     title: str
     content: str
     user_id: int
@@ -39,13 +41,13 @@ class ThoughtCreate(BaseModel):
     content: str
 
 class ThoughtUpdate(BaseModel):
-    id: Optional[int] = None
+    uuid: Optional[UUID] = None
     title: Optional[str] = None
     content: Optional[str] = None
 
 
 class BulkDeleteThoughts(BaseModel):
-    ids: List[int]
+    uuids: List[UUID]
 
 
 class Role(str,Enum):
@@ -58,7 +60,7 @@ class UserCreate(BaseModel):
     role: Role
 
 class UserOut(BaseModel):
-    id: int
+    uuid: UUID
     username: str
     email: str
     role: str

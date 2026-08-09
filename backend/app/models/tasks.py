@@ -15,6 +15,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from database import Base
+import uuid6
+from sqlalchemy import Uuid
 
 
 class TaskPriority(str, Enum):
@@ -35,6 +37,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
 
     # Owner
     user_id: Mapped[int] = mapped_column(

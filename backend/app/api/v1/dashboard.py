@@ -128,7 +128,7 @@ async def get_dashboard_data(
         "has_journaled_today": has_journaled_today,
         "recent_tasks": [
             {
-                "id": t.id,
+                "uuid": t.uuid,
                 "title": t.title,
                 "priority": getattr(t.priority, "value", t.priority),
                 "due_date": t.due_date,
@@ -136,7 +136,7 @@ async def get_dashboard_data(
         ],
         "recent_notes": [
             {
-                "id": t.id,
+                "uuid": t.uuid,
                 "title": t.title,
                 "content_preview": t.content[:150] if t.content else "",
                 "created_at": t.created_at,
@@ -144,7 +144,7 @@ async def get_dashboard_data(
         ],
         "recent_journals": [
             {
-                "id": j.id,
+                "uuid": j.uuid,
                 "title": j.date.strftime("%b %d, %Y") if j.date else "Journal Entry",
                 "date": j.date,
                 "content_preview": j.content[:150] if j.content else "",

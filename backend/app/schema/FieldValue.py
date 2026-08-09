@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel
+from uuid import UUID
 
 
 class FieldValueCreate(BaseModel):
@@ -7,4 +8,4 @@ class FieldValueCreate(BaseModel):
     field_type: str
     value: Optional[str] = None
 
-    field_id: Optional[int] = None
+    field_uuid: Optional[UUID] = None

@@ -9,7 +9,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
-
+import uuid6
+from sqlalchemy import Uuid
 from enum import Enum
 
 class FieldType(str, Enum):
@@ -22,6 +23,7 @@ class Journal(Base):
     __tablename__ = 'journals'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False,index=True)
 
     date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -47,6 +49,7 @@ class SectionTemplate(Base):
     __tablename__ = 'section_templates'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False,index=True)
 
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -78,6 +81,7 @@ class SectionField(Base):
     __tablename__ = "section_fields"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
 
     template_id: Mapped[int] = mapped_column(
         ForeignKey("section_templates.id"),
@@ -112,6 +116,7 @@ class JournalSection(Base):
     __tablename__ = "journal_sections"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
     journal_id: Mapped[int] = mapped_column(
         ForeignKey("journals.id"), nullable=False,index=True
     )
@@ -142,6 +147,7 @@ class FieldValue(Base):
     __tablename__ = "field_values"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
 
     section_id: Mapped[int] = mapped_column(
         ForeignKey("journal_sections.id"),

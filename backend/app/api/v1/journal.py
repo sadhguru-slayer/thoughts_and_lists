@@ -13,6 +13,8 @@ from schema.Journal import JournalCreate, JournalResponse, JournalUpdate
 from schema.JournalSection import JournalSectionCreate
 from models import journal
 from enum import Enum
+from uuid import UUID
+
 app = APIRouter()
 
 @app.get("/journals",response_model = List[JournalResponse])
@@ -152,9 +154,9 @@ async def get_journal_analytics(
     }
 
 
-@app.get("/journal/{journal_id}")
+@app.get("/journal/{journal_uuid}")
 async def get_journal_detail(
-    journal_id: int,
+    journal_uuid: UUID,
     db: db_session,
     token: str = Depends(oauth2_scheme)
 ):
@@ -164,10 +166,10 @@ async def get_journal_detail(
     result = await db.execute(
         select(journal.Journal)
         .options(
-            selectinload(journal.Journal.journal_sections)
-            .selectinload(journal.JournalSection.field_values)
+            selectinload(journal.Journal.journal_sections).selectinload(journal.JournalSection.field_values),
+            selectinload(journal.Journal.journal_sections).selectinload(journal.JournalSection.template)
         )
-        .where(journal.Journal.id == journal_id)
+        .where(journal.Journal.uuid == journal_uuid)
         .where(journal.Journal.user_id == current_user.id)
     )
 
@@ -177,17 +179,17 @@ async def get_journal_detail(
         raise HTTPException(status_code=404, detail="Journal not found")
     
     return {
-        "id": journal_obj.id,
+        "uuid": journal_obj.uuid,
         "date": journal_obj.date,
         "content": journal_obj.content,
         "sections": [
             {
-                "id": section.id,
+                "uuid": section.uuid,
                 "name": section.name,
-                "template_id": section.template_id,
+                "template_uuid": section.template.uuid if section.template else None,
                 "field_values": [
                     {
-                        "id": fv.id,
+                        "uuid": fv.uuid,
                         "label": fv.label,
                         "field_type": fv.field_type,
                         "value": fv.value
@@ -235,7 +237,7 @@ async def get_latest_journal_structure(
             
         active_sections.append({
             "name": section.name,
-            "template_id": section.template_id,
+            "template_uuid": section.template.uuid,
             "fields": [
                 {
                     "label": fv.label,
@@ -275,13 +277,13 @@ async def get_existing_templates(
     output = []
     for t in templates:
         output.append({
-            "id": t.id,
+            "uuid": t.uuid,
             "name": t.name,
             "description": t.description,
             "status": getattr(t, "status", "active"),  
             "fields": [
                 {
-                    "id": f.id,
+                    "uuid": f.uuid,
                     "label": f.label,
                     "field_type": f.field_type.value if isinstance(f.field_type, Enum) else f.field_type,
                     "placeholder": f.placeholder,
@@ -293,9 +295,9 @@ async def get_existing_templates(
 
     return output
 
-@app.delete("/templates/{template_id}")
+@app.delete("/templates/{template_uuid}")
 async def delete_template(
-    template_id: int,
+    template_uuid: UUID,
     db: db_session,
     token: str = Depends(oauth2_scheme)
 ):
@@ -305,7 +307,7 @@ async def delete_template(
         
     result = await db.execute(
         select(journal.SectionTemplate)
-        .where(journal.SectionTemplate.id == template_id)
+        .where(journal.SectionTemplate.uuid == template_uuid)
         .where(journal.SectionTemplate.user_id == current_user.id)
     )
     template = result.scalar_one_or_none()
@@ -335,13 +337,23 @@ async def create_journal(
     await db.flush()
     sections_data = data.sections or []
 
-    template_ids = [s.template_id for s in sections_data if s.template_id]
+    template_uuids = [s.template_uuid for s in sections_data if s.template_uuid]
 
     template_fields_map = defaultdict(list)
-    if template_ids:
+    uuid_to_id_map = {}
+    if template_uuids:
+        result = await db.execute(
+            select(journal.SectionTemplate).where(
+                journal.SectionTemplate.uuid.in_(template_uuids)
+            )
+        )
+        templates = result.scalars().all()
+        for t in templates:
+            uuid_to_id_map[t.uuid] = t.id
+
         result = await db.execute(
             select(journal.SectionField).where(
-                journal.SectionField.template_id.in_(template_ids)
+                journal.SectionField.template_id.in_(list(uuid_to_id_map.values()))
             )
         )
         fields = result.scalars().all()
@@ -349,9 +361,10 @@ async def create_journal(
             template_fields_map[f.template_id].append(f)
 
     for section_data in sections_data:
+        t_id = uuid_to_id_map.get(section_data.template_uuid) if section_data.template_uuid else None
         section = journal.JournalSection(
             journal_id=new_journal.id,
-            template_id=section_data.template_id,
+            template_id=t_id,
             name=section_data.name
         )
         db.add(section)
@@ -359,27 +372,31 @@ async def create_journal(
         existing_labels = {fv.label for fv in (section_data.field_values or [])}
 
         # CASE A: Existing template
-        if section_data.template_id:
-            template_fields = template_fields_map[section_data.template_id]
+        if t_id:
+            template_fields = template_fields_map[t_id]
             max_order = max([f.order for f in template_fields], default=-1) if template_fields else -1
             for fv in section_data.field_values or []:
-                if not fv.field_id:
+                if not getattr(fv, 'field_uuid', None):
                     max_order += 1
                     new_tf = journal.SectionField(
-                        template_id=section_data.template_id,
+                        template_id=t_id,
                         label=fv.label,
                         field_type=fv.field_type,
                         order=max_order
                     )
                     db.add(new_tf)
                     await db.flush()
-                    fv.field_id = new_tf.id
+                    # We inject field_id back into fv manually because it's a Pydantic object
+                    setattr(fv, '_internal_field_id', new_tf.id)
                     template_fields.append(new_tf)
+                else:
+                    matched_f = next((f for f in template_fields if f.uuid == fv.field_uuid), None)
+                    setattr(fv, '_internal_field_id', matched_f.id if matched_f else None)
 
             # If the user toggled reusable off for an existing template, mark it inactive.
             if not getattr(section_data, "reusable", True):
                 db_template = await db.execute(
-                    select(journal.SectionTemplate).where(journal.SectionTemplate.id == section_data.template_id)
+                    select(journal.SectionTemplate).where(journal.SectionTemplate.id == t_id)
                 )
                 template_to_update = db_template.scalar_one_or_none()
                 if template_to_update:
@@ -408,14 +425,14 @@ async def create_journal(
 
             await db.flush()
             for fv, tf in zip(section_data.field_values or [], template_fields):
-                fv.field_id = tf.id
+                setattr(fv, '_internal_field_id', tf.id)
 
             section.template_id = new_template.id
 
         for fv in section_data.field_values or []:
             db.add(journal.FieldValue(
                 section_id=section.id,
-                field_id=fv.field_id,
+                field_id=getattr(fv, '_internal_field_id', None),
                 label=fv.label,
                 field_type=fv.field_type,
                 value=fv.value
@@ -427,9 +444,9 @@ async def create_journal(
     return new_journal
 
 
-@app.patch("/journal/{journal_id}")
+@app.patch("/journal/{journal_uuid}")
 async def update_journal(
-    journal_id: int,
+    journal_uuid: UUID,
     data: JournalUpdate,
     db: db_session,
     token: str = Depends(oauth2_scheme)
@@ -444,7 +461,7 @@ async def update_journal(
             selectinload(journal.Journal.journal_sections)
             .selectinload(journal.JournalSection.field_values)
         )
-        .where(journal.Journal.id == journal_id)
+        .where(journal.Journal.uuid == journal_uuid)
         .where(journal.Journal.user_id == current_user.id)
     )
     journal_obj = result.scalar_one_or_none()
@@ -459,23 +476,23 @@ async def update_journal(
         journal_obj.content = data.content
         has_updates = True
 
-    section_map = {section.id: section for section in journal_obj.journal_sections}
+    section_map = {section.uuid: section for section in journal_obj.journal_sections}
     for section_data in data.sections or []:
-        db_section = section_map.get(section_data.id)
+        db_section = section_map.get(section_data.uuid)
         if not db_section:
-            raise HTTPException(status_code=404, detail=f"Section {section_data.id} not found in journal")
+            raise HTTPException(status_code=404, detail=f"Section {section_data.uuid} not found in journal")
 
         if section_data.name is not None:
             db_section.name = section_data.name
             has_updates = True
 
-        field_map = {fv.id: fv for fv in db_section.field_values}
+        field_map = {fv.uuid: fv for fv in db_section.field_values}
         for field_data in section_data.field_values or []:
-            db_field = field_map.get(field_data.id)
+            db_field = field_map.get(field_data.uuid)
             if not db_field:
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Field value {field_data.id} not found in section {section_data.id}",
+                    detail=f"Field value {field_data.uuid} not found in section {section_data.uuid}",
                 )
             db_field.value = field_data.value
             has_updates = True
@@ -487,10 +504,10 @@ async def update_journal(
     await db.refresh(journal_obj)
     return {"message": "Journal updated successfully"}
 
-@app.delete("/journal/{journal_id}")
+@app.delete("/journal/{journal_uuid}")
 async def delete_journal(
     db: db_session,
-    journal_id: int = Path(..., description="ID of the journal to delete"),
+    journal_uuid: UUID = Path(..., description="UUID of the journal to delete"),
     token: str = Depends(oauth2_scheme)
 ):
     current_user = await get_current_user(db, token)
@@ -499,19 +516,22 @@ async def delete_journal(
 
     result = await db.execute(
         select(journal.Journal)
-        .where(journal.Journal.id == journal_id)
+        .where(journal.Journal.uuid == journal_uuid)
         .where(journal.Journal.user_id == current_user.id)
     )
     existing_journal = result.scalar_one_or_none()
     if not existing_journal:
         raise HTTPException(status_code=404, detail="Journal not found")
 
+    # existing_journal.id is the internal integer ID we can use for fast deletes
+    journal_internal_id = existing_journal.id
+    
     # Delete all FieldValues of the journal's sections
     await db.execute(
         delete(journal.FieldValue).where(
             journal.FieldValue.section_id.in_(
                 select(journal.JournalSection.id)
-                .where(journal.JournalSection.journal_id == journal_id)
+                .where(journal.JournalSection.journal_id == journal_internal_id)
             )
         )
     )
@@ -519,13 +539,13 @@ async def delete_journal(
     # Delete all sections of the journal
     await db.execute(
         delete(journal.JournalSection).where(
-            journal.JournalSection.journal_id == journal_id
+            journal.JournalSection.journal_id == journal_internal_id
         )
     )
 
     # Finally, delete the journal
     await db.execute(
-        delete(journal.Journal).where(journal.Journal.id == journal_id)
+        delete(journal.Journal).where(journal.Journal.id == journal_internal_id)
     )
     await db.commit()
 

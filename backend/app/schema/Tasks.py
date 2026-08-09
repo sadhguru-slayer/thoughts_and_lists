@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -45,7 +46,7 @@ class TaskUpdate(BaseModel):
 class TaskSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    uuid: UUID
     title: str
     status: TaskStatus
     priority: TaskPriority
@@ -59,7 +60,7 @@ class TaskSummary(BaseModel):
 class TaskDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    uuid: UUID
     title: str
     description: Optional[str] = None
 
@@ -84,13 +85,13 @@ class TaskDetail(BaseModel):
 # ---------- Bulk Delete ----------
 
 class BulkDeleteTasks(BaseModel):
-    ids: list[int]
+    uuids: list[UUID]
 
 
 # ---------- Reorder ----------
 
 class TaskOrder(BaseModel):
-    id: int
+    uuid: UUID
     position: int
 
 

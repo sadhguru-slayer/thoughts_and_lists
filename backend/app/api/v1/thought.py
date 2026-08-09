@@ -12,6 +12,7 @@ from schema.UserAndThought import (
     BulkDeleteThoughts,
 )
 from fastapi import HTTPException, Path, Depends, APIRouter
+from uuid import UUID
 from services.auth import get_current_user
 
 CONTENT_PREVIEW_MAX = 120
@@ -32,7 +33,7 @@ def _preview_column(column, max_len: int):
 def _summary_query(user: UserOut):
     query = (
         select(
-            models.Thought.id,
+            models.Thought.uuid,
             _preview_column(models.Thought.title, TITLE_PREVIEW_MAX).label("title"),
             _preview_column(models.Thought.content, CONTENT_PREVIEW_MAX).label(
                 "content_preview"
@@ -53,7 +54,7 @@ async def get_thoughts(db: db_session, user: UserOut) -> List[ThoughtSummary]:
     rows = result.all()
     return [
         ThoughtSummary(
-            id=row.id,
+            uuid=row.uuid,
             title=row.title or "",
             content_preview=row.content_preview or "",
             user_id=row.user_id,
@@ -64,8 +65,8 @@ async def get_thoughts(db: db_session, user: UserOut) -> List[ThoughtSummary]:
     ]
 
 
-async def get_thought(db: db_session, id: int, user: UserOut) -> ThoughtDetail:
-    query = select(models.Thought).where(models.Thought.id == id)
+async def get_thought(db: db_session, thought_uuid: UUID, user: UserOut) -> ThoughtDetail:
+    query = select(models.Thought).where(models.Thought.uuid == thought_uuid)
     if user.role != "admin":
         query = query.where(models.Thought.user_id == user.id)
 
@@ -74,7 +75,7 @@ async def get_thought(db: db_session, id: int, user: UserOut) -> ThoughtDetail:
     if not thought:
         raise HTTPException(
             status_code=404,
-            detail=f"Thought with id {id} not found or you do not have permission to view it.",
+            detail=f"Thought with uuid {thought_uuid} not found or you do not have permission to view it.",
         )
     return thought
 
@@ -90,32 +91,32 @@ async def create_thought(db: db_session, thought: ThoughtCreate, user: UserOut):
     await db.refresh(new_thought)
     return new_thought
 
-async def delete_thought(db: db_session, id: int, user: UserOut):
+async def delete_thought(db: db_session, thought_uuid: UUID, user: UserOut):
     result = await db.execute(
-        select(models.Thought).where(models.Thought.id == id, models.Thought.user_id == user.id)
+        select(models.Thought).where(models.Thought.uuid == thought_uuid, models.Thought.user_id == user.id)
     )
     thought = result.scalar_one_or_none()
     if not thought:
         raise HTTPException(
             status_code=404,
-            detail=f"Thought with id {id} not found or you do not have permission to delete it."
+            detail=f"Thought with uuid {thought_uuid} not found or you do not have permission to delete it."
         )
     
     await db.delete(thought)
     await db.commit()
-    return {"message": f"Thought with id {id} deleted successfully."}
+    return {"message": f"Thought with uuid {thought_uuid} deleted successfully."}
 
 
-async def update_thought(db: db_session, id: int, thought_data: ThoughtUpdate, user: UserOut):
+async def update_thought(db: db_session, thought_uuid: UUID, thought_data: ThoughtUpdate, user: UserOut):
     result = await db.execute(
-        select(models.Thought).where(models.Thought.id == id, models.Thought.user_id == user.id)
+        select(models.Thought).where(models.Thought.uuid == thought_uuid, models.Thought.user_id == user.id)
     )
     db_thought = result.scalar_one_or_none()
     
     if not db_thought:
         raise HTTPException(
             status_code=404,
-            detail=f"Thought with id {id} not found or you do not have permission to update it."
+            detail=f"Thought with uuid {thought_uuid} not found or you do not have permission to update it."
         )
     
     update_fields = thought_data.dict(exclude_unset=True)
@@ -128,10 +129,10 @@ async def update_thought(db: db_session, id: int, thought_data: ThoughtUpdate, u
     return {"message": "Thought updated successfully", "thought": db_thought}
 
 
-async def bulk_delete_thoughts(db: db_session, ids: List[int], user: UserOut):
+async def bulk_delete_thoughts(db: db_session, uuids: List[UUID], user: UserOut):
     result = await db.execute(
         select(models.Thought).where(
-            models.Thought.id.in_(ids),
+            models.Thought.uuid.in_(uuids),
             models.Thought.user_id == user.id
         )
     )
@@ -151,16 +152,16 @@ async def read_thoughts(db: db_session, token: str = Depends(oauth2_scheme)):
     return await get_thoughts(db, user)
 
 
-@app.get("/thoughts/{id}", response_model=ThoughtDetail)
+@app.get("/thoughts/{thought_uuid}", response_model=ThoughtDetail)
 async def read_thought(
     db: db_session,
-    id: int = Path(..., description="ID of the thought to retrieve"),
+    thought_uuid: UUID = Path(..., description="UUID of the thought to retrieve"),
     token: str = Depends(oauth2_scheme),
 ):
     user = await get_current_user(db, token)
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return await get_thought(db, id, user)
+    return await get_thought(db, thought_uuid, user)
 
 
 @app.post("/thoughts", response_model=ThoughtDetail)
@@ -175,21 +176,21 @@ async def add_thought(
     return await create_thought(db, thought, user)
 
 
-@app.delete("/thoughts/{id}")
+@app.delete("/thoughts/{thought_uuid}")
 async def remove_thought(
     db: db_session,
-    id: int = Path(..., description="ID of the thought to delete"),
+    thought_uuid: UUID = Path(..., description="UUID of the thought to delete"),
     token: str = Depends(oauth2_scheme)
 ):
     user = await get_current_user(db, token)
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return await delete_thought(db, id, user)
+    return await delete_thought(db, thought_uuid, user)
 
 
-@app.patch("/thoughts/{id}")
+@app.patch("/thoughts/{thought_uuid}")
 async def update_thoughts(
-    id: int,
+    thought_uuid: UUID,
     thought: ThoughtUpdate,
     db: db_session,
     token: str = Depends(oauth2_scheme)
@@ -197,7 +198,7 @@ async def update_thoughts(
     user = await get_current_user(db, token)
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return await update_thought(db, id, thought, user)
+    return await update_thought(db, thought_uuid, thought, user)
 
 
 @app.post("/thoughts/bulk-delete")
@@ -209,4 +210,4 @@ async def bulk_delete(
     user = await get_current_user(db, token)
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return await bulk_delete_thoughts(db, payload.ids, user)
+    return await bulk_delete_thoughts(db, payload.uuids, user)

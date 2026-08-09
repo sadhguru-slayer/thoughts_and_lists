@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 from .JournalSection import JournalSectionCreate
@@ -12,22 +13,22 @@ class JournalBase(BaseModel):
 from pydantic import model_validator
 
 class JournalCreate(JournalBase):
-    template_id: Optional[int] = None
+    template_uuid: Optional[UUID] = None
     sections: Optional[List[JournalSectionCreate]] = None
 
     @model_validator(mode="after")
     def validate_input(self):
-        if self.template_id and self.sections:
+        if self.template_uuid and self.sections:
             # allowed → filled template
             return self
-        if not self.template_id and not self.sections and not self.content:
-            raise ValueError("Journal must have content, template_id, or sections")
+        if not self.template_uuid and not self.sections and not self.content:
+            raise ValueError("Journal must have content, template_uuid, or sections")
 
         return self
 
 
 class JournalResponse(JournalBase):
-    id: int
+    uuid: UUID
     user_id: int
     created_at: datetime
 
@@ -36,12 +37,12 @@ class JournalResponse(JournalBase):
 
 
 class FieldValueUpdate(BaseModel):
-    id: int
+    uuid: UUID
     value: Optional[str] = None
 
 
 class JournalSectionUpdate(BaseModel):
-    id: int
+    uuid: UUID
     name: Optional[str] = None
     field_values: List[FieldValueUpdate] = []
 

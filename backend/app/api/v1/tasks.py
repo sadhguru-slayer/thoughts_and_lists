@@ -10,6 +10,7 @@ from services.auth import get_current_user
 from models.tasks import Task,TaskPriority,TaskStatus
 
 from typing import List
+from uuid import UUID
 
 from schema.UserAndThought import UserOut
 from schema.Tasks import (
@@ -82,10 +83,10 @@ async def get_tasks(
     return result.scalars().all()
 
 
-async def get_task(db: db_session, task_id: int, user: UserOut):
+async def get_task(db: db_session, task_uuid: UUID, user: UserOut):
     result = await db.execute(
         select(Task).where(
-            Task.id == task_id,
+            Task.uuid == task_uuid,
             Task.user_id == user.id,
         )
     )
@@ -95,7 +96,7 @@ async def get_task(db: db_session, task_id: int, user: UserOut):
     if not task:
         raise HTTPException(
             status_code=404,
-            detail=f"Task with id {task_id} not found."
+            detail=f"Task with uuid {task_uuid} not found."
         )
 
     return task
@@ -127,13 +128,13 @@ async def create_task(
 
 async def update_task(
     db: db_session,
-    task_id: int,
+    task_uuid: UUID,
     task_data: TaskUpdate,
     user: UserOut,
 ):
     result = await db.execute(
         select(Task).where(
-            Task.id == task_id,
+            Task.uuid == task_uuid,
             Task.user_id == user.id,
         )
     )
@@ -143,7 +144,7 @@ async def update_task(
     if not task:
         raise HTTPException(
             status_code=404,
-            detail=f"Task with id {task_id} not found."
+            detail=f"Task with uuid {task_uuid} not found."
         )
 
     updates = task_data.model_dump(exclude_unset=True)
@@ -170,12 +171,12 @@ async def update_task(
 
 async def delete_task(
     db: db_session,
-    task_id: int,
+    task_uuid: UUID,
     user: UserOut,
 ):
     result = await db.execute(
         select(Task).where(
-            Task.id == task_id,
+            Task.uuid == task_uuid,
             Task.user_id == user.id,
         )
     )
@@ -185,7 +186,7 @@ async def delete_task(
     if not task:
         raise HTTPException(
             status_code=404,
-            detail=f"Task with id {task_id} not found."
+            detail=f"Task with uuid {task_uuid} not found."
         )
 
     await db.delete(task)
@@ -195,8 +196,8 @@ async def delete_task(
         "message": "Task deleted successfully."
     }
 
-async def complete_task(db: db_session, task_id: int, user: UserOut):
-    task = await get_task(db, task_id, user)
+async def complete_task(db: db_session, task_uuid: UUID, user: UserOut):
+    task = await get_task(db, task_uuid, user)
 
     task.status = TaskStatus.COMPLETED
     task.completed = True
@@ -207,8 +208,8 @@ async def complete_task(db: db_session, task_id: int, user: UserOut):
 
     return task
 
-async def uncomplete_task(db: db_session, task_id: int, user: UserOut):
-    task = await get_task(db, task_id, user)
+async def uncomplete_task(db: db_session, task_uuid: UUID, user: UserOut):
+    task = await get_task(db, task_uuid, user)
 
     task.status = TaskStatus.TODO
     task.completed = False
@@ -219,8 +220,8 @@ async def uncomplete_task(db: db_session, task_id: int, user: UserOut):
 
     return task
 
-async def archive_task(db: db_session, task_id: int, user: UserOut):
-    task = await get_task(db, task_id, user)
+async def archive_task(db: db_session, task_uuid: UUID, user: UserOut):
+    task = await get_task(db, task_uuid, user)
 
     task.is_archived = True
 
@@ -266,10 +267,10 @@ async def read_tasks(
     )
 
 
-@app.get("/tasks/{id}", response_model=TaskDetail)
+@app.get("/tasks/{task_uuid}", response_model=TaskDetail)
 async def read_task(
     db: db_session,
-    id: int = Path(..., description="Task ID"),
+    task_uuid: UUID = Path(..., description="Task UUID"),
     token: str = Depends(oauth2_scheme),
 ):
     user = await get_current_user(db, token)
@@ -277,7 +278,7 @@ async def read_task(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    return await get_task(db, id, user)
+    return await get_task(db, task_uuid, user)
 
 
 @app.post("/tasks", response_model=TaskDetail)
@@ -294,9 +295,9 @@ async def add_task(
     return await create_task(db, task, user)
 
 
-@app.patch("/tasks/{id}")
+@app.patch("/tasks/{task_uuid}")
 async def edit_task(
-    id: int,
+    task_uuid: UUID,
     task: TaskUpdate,
     db: db_session,
     token: str = Depends(oauth2_scheme),
@@ -306,13 +307,13 @@ async def edit_task(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    return await update_task(db, id, task, user)
+    return await update_task(db, task_uuid, task, user)
 
 
-@app.delete("/tasks/{id}")
+@app.delete("/tasks/{task_uuid}")
 async def remove_task(
     db: db_session,
-    id: int = Path(..., description="Task ID"),
+    task_uuid: UUID = Path(..., description="Task UUID"),
     token: str = Depends(oauth2_scheme),
 ):
     user = await get_current_user(db, token)
@@ -320,11 +321,11 @@ async def remove_task(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    return await delete_task(db, id, user)
+    return await delete_task(db, task_uuid, user)
 
-@app.patch("/tasks/{id}/complete", response_model=TaskDetail)
+@app.patch("/tasks/{task_uuid}/complete", response_model=TaskDetail)
 async def mark_complete(
-    id: int,
+    task_uuid: UUID,
     db: db_session,
     token: str = Depends(oauth2_scheme),
 ):
@@ -333,11 +334,11 @@ async def mark_complete(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    return await complete_task(db, id, user)
+    return await complete_task(db, task_uuid, user)
 
-@app.patch("/tasks/{id}/uncomplete", response_model=TaskDetail)
+@app.patch("/tasks/{task_uuid}/uncomplete", response_model=TaskDetail)
 async def mark_uncomplete(
-    id: int,
+    task_uuid: UUID,
     db: db_session,
     token: str = Depends(oauth2_scheme),
 ):
@@ -346,11 +347,11 @@ async def mark_uncomplete(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    return await uncomplete_task(db, id, user)
+    return await uncomplete_task(db, task_uuid, user)
 
-@app.patch("/tasks/{id}/archive", response_model=TaskDetail)
+@app.patch("/tasks/{task_uuid}/archive", response_model=TaskDetail)
 async def archive(
-    id: int,
+    task_uuid: UUID,
     db: db_session,
     token: str = Depends(oauth2_scheme),
 ):
@@ -359,4 +360,4 @@ async def archive(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    return await archive_task(db, id, user)
+    return await archive_task(db, task_uuid, user)

@@ -7,6 +7,8 @@ from database import Base
 from sqlalchemy.orm import relationship
 # from .journal import Journal
 from datetime import time, datetime
+import uuid6
+from sqlalchemy import Uuid
 
 class Thought(Base):
     __tablename__ = "thoughts"
@@ -15,6 +17,7 @@ class Thought(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
     title: Mapped[str] = mapped_column(String, index=True, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
@@ -35,6 +38,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    uuid: Mapped[str] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False, unique=True, default=uuid6.uuid7)
 
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     username: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
