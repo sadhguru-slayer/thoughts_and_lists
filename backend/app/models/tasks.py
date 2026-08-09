@@ -26,6 +26,13 @@ class TaskPriority(str, Enum):
     URGENT = "URGENT"
 
 
+class TaskRecurrence(str, Enum):
+    NONE = "NONE"
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
+
 class TaskStatus(str, Enum):
     TODO = "TODO"
     IN_PROGRESS = "IN_PROGRESS"
@@ -96,6 +103,13 @@ class Task(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    recurrence_interval: Mapped[TaskRecurrence] = mapped_column(
+        SQLEnum(TaskRecurrence),
+        default=TaskRecurrence.NONE,
+        server_default="NONE",
+        nullable=False,
     )
 
     # Ordering

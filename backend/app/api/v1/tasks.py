@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, or_
 
 from fastapi import HTTPException, Path, Depends, APIRouter
@@ -7,7 +7,7 @@ from core.dependencies import db_session
 from core.config import oauth2_scheme
 from services.auth import get_current_user
 
-from models.tasks import Task,TaskPriority,TaskStatus
+from models.tasks import Task, TaskPriority, TaskStatus, TaskRecurrence
 
 from typing import List
 from uuid import UUID
@@ -46,6 +46,7 @@ async def get_tasks(
         Task.completed,
         Task.due_date,
         Task.created_at,
+        Task.recurrence_interval,
     ).where(
         Task.user_id == user.id,
         Task.is_archived == archived,
@@ -98,6 +99,7 @@ async def get_tasks(
             completed=row.completed,
             due_date=row.due_date,
             created_at=row.created_at,
+            recurrence_interval=row.recurrence_interval,
         )
         for row in rows
     ]
@@ -135,6 +137,7 @@ async def create_task(
         due_date=task_data.due_date,
         reminder_at=reminder_at,
         reminder_sent=False,
+        recurrence_interval=task_data.recurrence_interval,
         user_id=user.id,
     )
 
@@ -218,6 +221,37 @@ async def delete_task(
 
 async def complete_task(db: db_session, task_uuid: UUID, user: UserOut):
     task = await get_task(db, task_uuid, user)
+
+    if task.recurrence_interval != TaskRecurrence.NONE:
+        new_due_date = None
+        new_reminder_at = None
+        
+        delta = None
+        if task.recurrence_interval == TaskRecurrence.DAILY:
+            delta = timedelta(days=1)
+        elif task.recurrence_interval == TaskRecurrence.WEEKLY:
+            delta = timedelta(weeks=1)
+        elif task.recurrence_interval == TaskRecurrence.MONTHLY:
+            delta = timedelta(days=30)
+            
+        if delta:
+            if task.due_date:
+                new_due_date = task.due_date + delta
+            if task.reminder_at:
+                new_reminder_at = task.reminder_at + delta
+
+        new_task = Task(
+            title=task.title,
+            description=task.description,
+            priority=task.priority,
+            due_date=new_due_date,
+            reminder_at=new_reminder_at,
+            reminder_sent=False,
+            recurrence_interval=task.recurrence_interval,
+            user_id=user.id,
+        )
+        db.add(new_task)
+        task.recurrence_interval = TaskRecurrence.NONE
 
     task.status = TaskStatus.COMPLETED
     task.completed = True

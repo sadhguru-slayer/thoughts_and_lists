@@ -12,6 +12,12 @@ class TaskPriority(str, Enum):
     HIGH = "HIGH"
     URGENT = "URGENT"
 
+class TaskRecurrence(str, Enum):
+    NONE = "NONE"
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
 
 class TaskStatus(str, Enum):
     TODO = "TODO"
@@ -28,6 +34,7 @@ class TaskCreate(BaseModel):
     priority: TaskPriority = TaskPriority.MEDIUM
     due_date: Optional[datetime] = None
     reminder_at: Optional[datetime] = None
+    recurrence_interval: Optional[TaskRecurrence] = TaskRecurrence.NONE
 
 
 # ---------- Update ----------
@@ -39,6 +46,7 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     due_date: Optional[datetime] = None
     reminder_at: Optional[datetime] = None
+    recurrence_interval: Optional[TaskRecurrence] = None
 
 
 # ---------- Summary (for GET /tasks) ----------
@@ -53,6 +61,7 @@ class TaskSummary(BaseModel):
     completed: bool
     due_date: Optional[datetime] = None
     created_at: datetime
+    recurrence_interval: TaskRecurrence
 
 
 # ---------- Detail (for GET /tasks/{id}) ----------
@@ -72,6 +81,7 @@ class TaskDetail(BaseModel):
     due_date: Optional[datetime] = None
     reminder_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    recurrence_interval: TaskRecurrence
 
     position: int
     is_archived: bool
