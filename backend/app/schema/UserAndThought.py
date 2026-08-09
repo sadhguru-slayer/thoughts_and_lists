@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, time
 from uuid import UUID
 
 class ThoughtBase(BaseModel):
@@ -67,14 +67,14 @@ class UserOut(BaseModel):
     created_at: datetime
     timezone: Optional[str] = "Asia/Kolkata"
     journal_reminder_active: Optional[bool] = True
-    journal_reminder_time: Optional[str] = "22:00:00"
+    journal_reminder_time: Optional[time] = None
     class Config:
         from_attributes = True
 
 class UserSettingsUpdate(BaseModel):
     timezone: Optional[str] = None
     journal_reminder_active: Optional[bool] = None
-    journal_reminder_time: Optional[str] = None
+    journal_reminder_time: Optional[time] = None
 
 class OTPRequest(BaseModel):
     email: str
