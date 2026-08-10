@@ -7,7 +7,7 @@ import logging
 from database_sync import SessionLocal
 from models.models import User
 from models.journal import Journal
-from models.tasks import Task, TaskStatus
+from models.tasks import Task, TaskStatus, TaskRecurrence
 from services.email import send_reminder_email
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,6 @@ def check_all_reminders():
             select(Task)
             .options(joinedload(Task.user))
             .where(
-                Task.reminder_sent.is_(False),
                 Task.is_archived.is_(False),
                 Task.status.notin_(
                     [
@@ -119,17 +118,35 @@ def check_all_reminders():
                 )
                 continue
 
+            is_recurring = task.recurrence_interval != TaskRecurrence.NONE
+            should_send = False
+            email_subject = f"Task Reminder: {task.title}"
+            email_title = "Task Reminder"
+            
+            if not is_recurring:
+                if not task.reminder_sent:
+                    should_send = True
+            else:
+                # For recurring/overdue tasks, remind at most once per day
+                if not task.last_reminder_sent_at or task.last_reminder_sent_at.date() < now_utc.date():
+                    should_send = True
+                    email_title = "Recurring Task Reminder"
+                    email_subject = f"Overdue Task: {task.title}"
+
+            if not should_send:
+                continue
+
             send_reminder_email(
                 task.user.email,
-                f"Task Reminder: {task.title}",
-                "Task Reminder",
+                email_subject,
+                email_title,
                 task.title,
-                task.description
-                or "You have a task that requires your attention.",
-                icon="✅",
+                task.description or "You have a task that requires your attention.",
+                icon="🚨" if is_recurring else "✅",
                 task_id=task.id,
             )
 
             task.reminder_sent = True
+            task.last_reminder_sent_at = now_utc
 
         db.commit()

@@ -16,6 +16,7 @@ from enum import Enum
 class FieldType(str, Enum):
     TEXT = "text"
     TEXTAREA = "textarea"
+    RICHTEXT = "richtext"
     CHECKBOX = "checkbox"
 
 
