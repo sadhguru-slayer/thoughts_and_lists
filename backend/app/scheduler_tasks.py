@@ -127,8 +127,8 @@ def check_all_reminders():
                 if not task.reminder_sent:
                     should_send = True
             else:
-                # For recurring/overdue tasks, remind at most once per day
-                if not task.last_reminder_sent_at or task.last_reminder_sent_at.date() < now_utc.date():
+                # For recurring/overdue tasks, remind at most once every 24 hours
+                if not task.last_reminder_sent_at or (now_utc - task.last_reminder_sent_at).total_seconds() >= 86400:
                     should_send = True
                     email_title = "Recurring Task Reminder"
                     email_subject = f"Overdue Task: {task.title}"

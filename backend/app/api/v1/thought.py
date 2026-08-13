@@ -49,10 +49,46 @@ def _summary_query(user: UserOut):
     return query
 
 
-async def get_thoughts(db: db_session, user: UserOut) -> List[ThoughtSummary]:
-    result = await db.execute(_summary_query(user))
+from math import ceil
+from fastapi import HTTPException, Path, Depends, APIRouter, Query
+
+from sqlalchemy import or_
+
+async def get_thoughts(
+    db: db_session,
+    user: UserOut,
+    search: str | None = None,
+    page: int = 1,
+    per_page: int = 20
+):
+    count_query = select(func.count(models.Thought.id))
+    if user.role != "admin":
+        count_query = count_query.where(models.Thought.user_id == user.id)
+    
+    if search:
+        count_query = count_query.where(
+            or_(
+                models.Thought.title.ilike(f"%{search}%"),
+                models.Thought.content.ilike(f"%{search}%")
+            )
+        )
+
+    total = (await db.scalar(count_query)) or 0
+
+    query = _summary_query(user)
+    if search:
+        query = query.where(
+            or_(
+                models.Thought.title.ilike(f"%{search}%"),
+                models.Thought.content.ilike(f"%{search}%")
+            )
+        )
+    
+    query = query.offset((page - 1) * per_page).limit(per_page)
+    result = await db.execute(query)
     rows = result.all()
-    return [
+    
+    items = [
         ThoughtSummary(
             uuid=row.uuid,
             title=row.title or "",
@@ -63,6 +99,14 @@ async def get_thoughts(db: db_session, user: UserOut) -> List[ThoughtSummary]:
         )
         for row in rows
     ]
+    total_pages = ceil(total / per_page) if per_page else 1
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages
+    }
 
 
 async def get_thought(db: db_session, thought_uuid: UUID, user: UserOut) -> ThoughtDetail:
@@ -144,12 +188,18 @@ async def bulk_delete_thoughts(db: db_session, uuids: List[UUID], user: UserOut)
 
 app = APIRouter()
 
-@app.get("/thoughts", response_model=List[ThoughtSummary])
-async def read_thoughts(db: db_session, token: str = Depends(oauth2_scheme)):
+@app.get("/thoughts")
+async def read_thoughts(
+    db: db_session,
+    search: str | None = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    token: str = Depends(oauth2_scheme)
+):
     user = await get_current_user(db, token)
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return await get_thoughts(db, user)
+    return await get_thoughts(db, user, search=search, page=page, per_page=per_page)
 
 
 @app.get("/thoughts/{thought_uuid}", response_model=ThoughtDetail)

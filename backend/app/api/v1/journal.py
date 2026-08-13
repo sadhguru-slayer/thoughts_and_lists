@@ -15,20 +15,44 @@ from models import journal
 from enum import Enum
 from uuid import UUID
 
+from math import ceil
+from fastapi import Form, HTTPException, Path, Depends, APIRouter, Query
+
 app = APIRouter()
 
-@app.get("/journals",response_model = List[JournalResponse])
-async def get_journals(db:db_session,token:str = Depends(oauth2_scheme)):
-    current_user = await get_current_user(db,token)
+@app.get("/journals")
+async def get_journals(
+    db: db_session,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    token: str = Depends(oauth2_scheme)
+):
+    current_user = await get_current_user(db, token)
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
+    
+    total = (await db.scalar(
+        select(func.count(journal.Journal.id))
+        .where(journal.Journal.user_id == current_user.id)
+    )) or 0
+
     result = await db.execute(
         select(journal.Journal)
         .where(journal.Journal.user_id == current_user.id)
         .order_by(journal.Journal.date.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
     )
     journals = result.scalars().all()
-    return journals
+    total_pages = ceil(total / per_page) if per_page else 1
+
+    return {
+        "items": [JournalResponse.model_validate(j) for j in journals],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages
+    }
 
 
 from datetime import datetime, timedelta

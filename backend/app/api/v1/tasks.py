@@ -1,17 +1,15 @@
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, or_
+from math import ceil
+from typing import List
+from uuid import UUID
 
-from fastapi import HTTPException, Path, Depends, APIRouter
+from fastapi import HTTPException, Path, Depends, APIRouter, Query
+from sqlalchemy import func, select, or_
 
 from core.dependencies import db_session
 from core.config import oauth2_scheme
 from services.auth import get_current_user
-
 from models.tasks import Task, TaskPriority, TaskStatus, TaskRecurrence
-
-from typing import List
-from uuid import UUID
-
 from schema.UserAndThought import UserOut
 from schema.Tasks import (
     TaskCreate,
@@ -21,11 +19,6 @@ from schema.Tasks import (
 )
 
 app = APIRouter()
-
-
-# ------------------------------------------------------------------
-# Service Functions
-# ------------------------------------------------------------------
 
 async def get_tasks(
     db: db_session,
@@ -37,60 +30,73 @@ async def get_tasks(
     overdue: bool = False,
     search: str | None = None,
     archived: bool = False,
+    page: int = 1,
+    per_page: int = 20,
 ):
-    query = select(
-        Task.uuid,
-        Task.title,
-        Task.status,
-        Task.priority,
-        Task.completed,
-        Task.due_date,
-        Task.created_at,
-        Task.recurrence_interval,
-    ).where(
+    base_filter = [
         Task.user_id == user.id,
         Task.is_archived == archived,
-    )
+    ]
 
     if status:
-        query = query.where(Task.status == status)
+        base_filter.append(Task.status == status)
 
     if priority:
-        query = query.where(Task.priority == priority)
+        base_filter.append(Task.priority == priority)
 
     if completed is not None:
         if completed:
-            query = query.where(Task.status == TaskStatus.COMPLETED)
+            base_filter.append(Task.status == TaskStatus.COMPLETED)
         else:
-            query = query.where(Task.status != TaskStatus.COMPLETED)
+            base_filter.append(Task.status != TaskStatus.COMPLETED)
 
     if today:
         today_date = datetime.now(timezone.utc).date()
-        query = query.where(Task.due_date.is_not(None))
-        query = query.where(Task.due_date >= datetime.combine(today_date, datetime.min.time(), tzinfo=timezone.utc))
-        query = query.where(Task.due_date < datetime.combine(today_date, datetime.max.time(), tzinfo=timezone.utc))
+        base_filter.extend([
+            Task.due_date.is_not(None),
+            Task.due_date >= datetime.combine(today_date, datetime.min.time(), tzinfo=timezone.utc),
+            Task.due_date < datetime.combine(today_date, datetime.max.time(), tzinfo=timezone.utc),
+        ])
 
     if overdue:
-        query = query.where(
+        base_filter.extend([
             Task.due_date.is_not(None),
             Task.due_date < datetime.now(timezone.utc),
             Task.status != TaskStatus.COMPLETED,
-        )
+        ])
 
     if search:
-        query = query.where(
+        base_filter.append(
             or_(
                 Task.title.ilike(f"%{search}%"),
                 Task.description.ilike(f"%{search}%"),
             )
         )
 
-    query = query.order_by(Task.position.asc())
+    count_query = select(func.count(Task.id)).where(*base_filter)
+    total = (await db.scalar(count_query)) or 0
+
+    query = (
+        select(
+            Task.uuid,
+            Task.title,
+            Task.status,
+            Task.priority,
+            Task.completed,
+            Task.due_date,
+            Task.created_at,
+            Task.recurrence_interval,
+        )
+        .where(*base_filter)
+        .order_by(Task.position.asc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
 
     result = await db.execute(query)
     rows = result.all()
 
-    return [
+    items = [
         TaskSummary(
             uuid=row.uuid,
             title=row.title,
@@ -103,6 +109,15 @@ async def get_tasks(
         )
         for row in rows
     ]
+
+    total_pages = ceil(total / per_page) if per_page else 1
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages
+    }
 
 
 async def get_task(db: db_session, task_uuid: UUID, user: UserOut):
@@ -290,7 +305,7 @@ async def archive_task(db: db_session, task_uuid: UUID, user: UserOut):
 # Routes
 # ------------------------------------------------------------------
 
-@app.get("/tasks", response_model=List[TaskSummary])
+@app.get("/tasks")
 async def read_tasks(
     db: db_session,
     token: str = Depends(oauth2_scheme),
@@ -302,6 +317,8 @@ async def read_tasks(
     overdue: bool = False,
     search: str | None = None,
     archived: bool = False,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
 ):
     user = await get_current_user(db, token)
 
@@ -318,6 +335,8 @@ async def read_tasks(
         overdue=overdue,
         search=search,
         archived=archived,
+        page=page,
+        per_page=per_page,
     )
 
 
