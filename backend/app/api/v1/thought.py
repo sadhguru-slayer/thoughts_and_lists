@@ -10,6 +10,7 @@ from schema.UserAndThought import (
     ThoughtSummary,
     ThoughtDetail,
     BulkDeleteThoughts,
+    BulkThoughtOrderUpdate,
 )
 from fastapi import HTTPException, Path, Depends, APIRouter
 from uuid import UUID
@@ -41,6 +42,10 @@ def _summary_query(user: UserOut):
             models.Thought.user_id,
             models.Thought.created_at,
             models.Thought.updated_at,
+            models.Thought.is_pinned,
+            models.Thought.pinned_at,
+            models.Thought.pinned_order,
+            models.Thought.is_starred,
         )
         .order_by(models.Thought.id.desc())
     )
@@ -96,6 +101,10 @@ async def get_thoughts(
             user_id=row.user_id,
             created_at=row.created_at,
             updated_at=row.updated_at,
+            is_pinned=row.is_pinned,
+            pinned_at=row.pinned_at,
+            pinned_order=row.pinned_order,
+            is_starred=row.is_starred,
         )
         for row in rows
     ]
@@ -163,8 +172,15 @@ async def update_thought(db: db_session, thought_uuid: UUID, thought_data: Thoug
             detail=f"Thought with uuid {thought_uuid} not found or you do not have permission to update it."
         )
     
+    from datetime import datetime, timezone
     update_fields = thought_data.dict(exclude_unset=True)
     for field, value in update_fields.items():
+        if field == "is_pinned":
+            if value is True and not db_thought.is_pinned:
+                db_thought.pinned_at = datetime.now(timezone.utc)
+            elif value is False:
+                db_thought.pinned_at = None
+                db_thought.pinned_order = None
         setattr(db_thought, field, value)
     
     await db.commit()
@@ -261,3 +277,30 @@ async def bulk_delete(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
     return await bulk_delete_thoughts(db, payload.uuids, user)
+
+@app.post("/thoughts/update-order")
+async def update_thought_orders(
+    payload: BulkThoughtOrderUpdate,
+    db: db_session,
+    token: str = Depends(oauth2_scheme)
+):
+    user = await get_current_user(db, token)
+    if not user:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    
+    uuids = [item.uuid for item in payload.orders]
+    result = await db.execute(
+        select(models.Thought).where(
+            models.Thought.uuid.in_(uuids),
+            models.Thought.user_id == user.id
+        )
+    )
+    thoughts = result.scalars().all()
+    thought_map = {t.uuid: t for t in thoughts}
+    
+    for item in payload.orders:
+        if item.uuid in thought_map:
+            thought_map[item.uuid].pinned_order = item.pinned_order
+            
+    await db.commit()
+    return {"message": "Thought orders updated successfully"}

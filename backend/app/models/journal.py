@@ -167,6 +167,7 @@ class FieldValue(Base):
     # ✅ Snapshot fields (correct design)
     label: Mapped[str] = mapped_column(String, nullable=False)
     field_type: Mapped[str] = mapped_column(String, nullable=False)
+    order: Mapped[int] = mapped_column(Integer, default=0)
 
     section: Mapped["JournalSection"] = relationship(
         "JournalSection",

@@ -39,6 +39,7 @@ class JournalResponse(JournalBase):
 class FieldValueUpdate(BaseModel):
     uuid: UUID
     value: Optional[str] = None
+    order: Optional[int] = None
 
 
 class JournalSectionUpdate(BaseModel):

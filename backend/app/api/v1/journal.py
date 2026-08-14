@@ -190,8 +190,11 @@ async def get_journal_detail(
     result = await db.execute(
         select(journal.Journal)
         .options(
-            selectinload(journal.Journal.journal_sections).selectinload(journal.JournalSection.field_values),
-            selectinload(journal.Journal.journal_sections).selectinload(journal.JournalSection.template)
+            selectinload(journal.Journal.journal_sections)
+                .selectinload(journal.JournalSection.field_values)
+                .selectinload(journal.FieldValue.field),
+            selectinload(journal.Journal.journal_sections)
+                .selectinload(journal.JournalSection.template)
         )
         .where(journal.Journal.uuid == journal_uuid)
         .where(journal.Journal.user_id == current_user.id)
@@ -218,7 +221,11 @@ async def get_journal_detail(
                         "field_type": fv.field_type,
                         "value": fv.value
                     }
-                    for fv in section.field_values
+                    # Sort by the FieldValue.order so drag-saved order is preserved
+                    for fv in sorted(
+                        section.field_values,
+                        key=lambda fv: fv.order
+                    )
                 ]
             }
             for section in journal_obj.journal_sections
@@ -238,7 +245,8 @@ async def get_latest_journal_structure(
         select(journal.Journal)
         .options(
             selectinload(journal.Journal.journal_sections)
-            .selectinload(journal.JournalSection.field_values),
+            .selectinload(journal.JournalSection.field_values)
+            .selectinload(journal.FieldValue.field),
             selectinload(journal.Journal.journal_sections)
             .selectinload(journal.JournalSection.template)
         )
@@ -268,7 +276,10 @@ async def get_latest_journal_structure(
                     "field_type": fv.field_type,
                     "value": None  # reset value
                 }
-                for fv in section.field_values
+                for fv in sorted(
+                    section.field_values,
+                    key=lambda fv: fv.order
+                )
             ]
         })
 
@@ -453,13 +464,14 @@ async def create_journal(
 
             section.template_id = new_template.id
 
-        for fv in section_data.field_values or []:
+        for order_idx, fv in enumerate(section_data.field_values or []):
             db.add(journal.FieldValue(
                 section_id=section.id,
                 field_id=getattr(fv, '_internal_field_id', None),
                 label=fv.label,
                 field_type=fv.field_type,
-                value=fv.value
+                value=fv.value,
+                order=order_idx
             ))
 
     await db.commit()
@@ -484,6 +496,7 @@ async def update_journal(
         .options(
             selectinload(journal.Journal.journal_sections)
             .selectinload(journal.JournalSection.field_values)
+            .selectinload(journal.FieldValue.field)
         )
         .where(journal.Journal.uuid == journal_uuid)
         .where(journal.Journal.user_id == current_user.id)
@@ -519,6 +532,10 @@ async def update_journal(
                     detail=f"Field value {field_data.uuid} not found in section {section_data.uuid}",
                 )
             db_field.value = field_data.value
+            if field_data.order is not None:
+                db_field.order = field_data.order
+                if db_field.field:
+                    db_field.field.order = field_data.order
             has_updates = True
 
     if has_updates:

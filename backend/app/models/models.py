@@ -29,6 +29,14 @@ class Thought(Base):
         DateTime(timezone=True), default=func.now(), server_default=func.now(), onupdate=func.now()
     )
 
+    # For pin
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pinned_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    
+    # For star
+    is_starred: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    
 class UserRole(str, Enum):
     USER = "user"
     ADMIN = "admin"

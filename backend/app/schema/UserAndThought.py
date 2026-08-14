@@ -20,6 +20,10 @@ class ThoughtSummary(BaseModel):
     user_id: int
     created_at: datetime
     updated_at: datetime
+    is_pinned: Optional[bool] = False
+    pinned_at: Optional[datetime] = None
+    pinned_order: Optional[int] = None
+    is_starred: Optional[bool] = False
 
     class Config:
         from_attributes = True
@@ -32,6 +36,10 @@ class ThoughtDetail(BaseModel):
     user_id: int
     created_at: datetime
     updated_at: datetime
+    is_pinned: Optional[bool] = False
+    pinned_at: Optional[datetime] = None
+    pinned_order: Optional[int] = None
+    is_starred: Optional[bool] = False
 
     class Config:
         from_attributes = True
@@ -44,10 +52,20 @@ class ThoughtUpdate(BaseModel):
     uuid: Optional[UUID] = None
     title: Optional[str] = None
     content: Optional[str] = None
+    is_pinned: Optional[bool] = None
+    pinned_order: Optional[int] = None
+    is_starred: Optional[bool] = None
 
 
 class BulkDeleteThoughts(BaseModel):
     uuids: List[UUID]
+
+class ThoughtOrderUpdate(BaseModel):
+    uuid: UUID
+    pinned_order: int
+
+class BulkThoughtOrderUpdate(BaseModel):
+    orders: List[ThoughtOrderUpdate]
 
 
 class Role(str,Enum):
