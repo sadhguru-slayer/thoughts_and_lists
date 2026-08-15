@@ -143,7 +143,7 @@ def check_all_reminders():
                 task.title,
                 task.description or "You have a task that requires your attention.",
                 icon="🚨" if is_recurring else "✅",
-                task_id=task.id,
+                task_id=task.uuid,
             )
 
             task.reminder_sent = True
