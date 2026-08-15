@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session,selectinload
 from typing import Annotated, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,delete,func
+from sqlalchemy import select, delete, func, and_
+from datetime import datetime, timedelta
 from models import models
 from core.dependencies import db_session
 from core.config import oauth2_scheme
@@ -25,27 +26,70 @@ async def get_journals(
     db: db_session,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    search: str = Query(None),
+    sort_order: str = Query("desc"),       # "asc" | "desc"
+    date_filter: str = Query("all"),       # "all" | "this_month" | "this_year"
     token: str = Depends(oauth2_scheme)
 ):
     current_user = await get_current_user(db, token)
     if not current_user:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
-    total = (await db.scalar(
-        select(func.count(journal.Journal.id))
-        .where(journal.Journal.user_id == current_user.id)
-    )) or 0
+
+    base_query = select(journal.Journal).where(journal.Journal.user_id == current_user.id)
+    count_query = select(func.count(journal.Journal.id)).where(journal.Journal.user_id == current_user.id)
+
+    # ── Date filter ──────────────────────────────────────────────────────────
+    now = datetime.utcnow()
+    from sqlalchemy import extract, cast, Integer
+    if date_filter in ("this_month", "month"):
+        date_cond = and_(
+            cast(extract("year",  journal.Journal.date), Integer) == now.year,
+            cast(extract("month", journal.Journal.date), Integer) == now.month,
+        )
+        base_query  = base_query.where(date_cond)
+        count_query = count_query.where(date_cond)
+    elif date_filter in ("this_year", "year"):
+        year_cond = (cast(extract("year", journal.Journal.date), Integer) == now.year)
+        base_query  = base_query.where(year_cond)
+        count_query = count_query.where(year_cond)
+
+    # ── Search ───────────────────────────────────────────────────────────────
+    if search:
+        from sqlalchemy import or_, cast, String, exists as sa_exists
+        s = f"%{search.lower()}%"
+
+        field_match_subq = (
+            select(journal.FieldValue.id)
+            .join(journal.JournalSection, journal.FieldValue.section_id == journal.JournalSection.id)
+            .where(journal.JournalSection.journal_id == journal.Journal.id)
+            .where(func.lower(func.cast(journal.FieldValue.value, String)).like(s))
+            .limit(1)
+            .correlate(journal.Journal)
+        )
+        search_filter = or_(
+            func.lower(func.cast(journal.Journal.content, String)).like(s),
+            func.lower(func.cast(journal.Journal.date, String)).like(s),
+            sa_exists(field_match_subq),
+        )
+        base_query  = base_query.where(search_filter)
+        count_query = count_query.where(search_filter)
+
+    total = (await db.scalar(count_query)) or 0
+
+    # ── Sort ─────────────────────────────────────────────────────────────────
+    if sort_order in ("asc", "oldest"):
+        order_cols = [journal.Journal.date.asc(), journal.Journal.id.asc()]
+    else:
+        order_cols = [journal.Journal.date.desc(), journal.Journal.id.desc()]
 
     result = await db.execute(
-        select(journal.Journal)
-        .where(journal.Journal.user_id == current_user.id)
-        .order_by(journal.Journal.date.desc())
+        base_query
+        .order_by(*order_cols)
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
     journals = result.scalars().all()
     total_pages = ceil(total / per_page) if per_page else 1
-
     return {
         "items": [JournalResponse.model_validate(j) for j in journals],
         "total": total,
@@ -53,6 +97,7 @@ async def get_journals(
         "per_page": per_page,
         "total_pages": total_pages
     }
+
 
 
 from datetime import datetime, timedelta
@@ -134,40 +179,46 @@ async def get_journal_analytics(
             }
         )
 
-    unique_dates = sorted(list(daily_map.keys()), reverse=True)
-    
+    # ── Streak calculation: based on journal DATE field only ────────────────
+    # Use Journal.date (not created_at/updated_at) so backdated entries and
+    # timezone differences don't corrupt the streak count.
+    journal_dates_for_streak = sorted(
+        list({_to_day_str(j.date) for j in journals if j.date}),
+        reverse=True
+    )
+
     current_streak = 0
     longest_streak = 0
-    
-    if unique_dates:
+
+    if journal_dates_for_streak:
         temp_longest = 1
-        for i in range(len(unique_dates) - 1):
-            d1 = datetime.strptime(unique_dates[i], "%Y-%m-%d")
-            d2 = datetime.strptime(unique_dates[i+1], "%Y-%m-%d")
+        for i in range(len(journal_dates_for_streak) - 1):
+            d1 = datetime.strptime(journal_dates_for_streak[i], "%Y-%m-%d")
+            d2 = datetime.strptime(journal_dates_for_streak[i + 1], "%Y-%m-%d")
             if (d1 - d2).days == 1:
                 temp_longest += 1
             else:
                 longest_streak = max(longest_streak, temp_longest)
                 temp_longest = 1
         longest_streak = max(longest_streak, temp_longest)
-        
+
         today_date = datetime.utcnow().date()
+        # Allow today or yesterday as the streak anchor (handles end-of-day timezone gap)
         date_candidates = [
-            (today_date + timedelta(days=1)).strftime("%Y-%m-%d"),
             today_date.strftime("%Y-%m-%d"),
-            (today_date - timedelta(days=1)).strftime("%Y-%m-%d")
+            (today_date - timedelta(days=1)).strftime("%Y-%m-%d"),
         ]
-        
-        if unique_dates[0] in date_candidates:
+
+        if journal_dates_for_streak[0] in date_candidates:
             current_streak = 1
-            for i in range(len(unique_dates) - 1):
-                d1 = datetime.strptime(unique_dates[i], "%Y-%m-%d")
-                d2 = datetime.strptime(unique_dates[i+1], "%Y-%m-%d")
+            for i in range(len(journal_dates_for_streak) - 1):
+                d1 = datetime.strptime(journal_dates_for_streak[i], "%Y-%m-%d")
+                d2 = datetime.strptime(journal_dates_for_streak[i + 1], "%Y-%m-%d")
                 if (d1 - d2).days == 1:
                     current_streak += 1
                 else:
                     break
-                    
+
     return {
         "total_journals": total_journals,
         "total_words": total_words,
