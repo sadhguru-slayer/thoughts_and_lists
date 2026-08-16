@@ -187,13 +187,15 @@ async def update_task(
 
     updates = task_data.model_dump(exclude_unset=True)
 
-    # Sync reminder_at with due_date if due_date is updated and reminder_at wasn't provided
-    if "due_date" in updates and "reminder_at" not in updates:
-        updates["reminder_at"] = updates["due_date"]
+    # Sync reminder_at with due_date if due_date is provided and reminder_at is missing or None
+    if "due_date" in updates and updates.get("due_date") is not None:
+        if "reminder_at" not in updates or updates.get("reminder_at") is None:
+            updates["reminder_at"] = updates["due_date"]
 
     # Reset reminder_sent when reminder_at or due_date changes
     if "due_date" in updates or "reminder_at" in updates:
         updates["reminder_sent"] = False
+        updates["last_reminder_sent_at"] = None
 
     for field, value in updates.items():
         setattr(task, field, value)
@@ -237,7 +239,12 @@ async def delete_task(
 async def complete_task(db: db_session, task_uuid: UUID, user: UserOut):
     task = await get_task(db, task_uuid, user)
 
-    if task.recurrence_interval != TaskRecurrence.NONE:
+    if task.recurrence_interval in (
+        TaskRecurrence.DAILY, 
+        TaskRecurrence.WEEKLY, 
+        TaskRecurrence.MONTHLY, 
+        # TaskRecurrence.TESTING_SEC
+    ):
         new_due_date = None
         new_reminder_at = None
         
@@ -248,12 +255,15 @@ async def complete_task(db: db_session, task_uuid: UUID, user: UserOut):
             delta = timedelta(weeks=1)
         elif task.recurrence_interval == TaskRecurrence.MONTHLY:
             delta = timedelta(days=30)
+        # elif task.recurrence_interval == TaskRecurrence.TESTING_SEC:
+        #     delta = timedelta(seconds=60)
             
         if delta:
             if task.due_date:
                 new_due_date = task.due_date + delta
             if task.reminder_at:
                 new_reminder_at = task.reminder_at + delta
+
 
         new_task = Task(
             title=task.title,

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
 from sqlalchemy import select, or_, and_, func
 from sqlalchemy.orm import joinedload
@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 def check_all_reminders():
     now_utc = datetime.now(timezone.utc)
+    # Add a 10s grace window so sub-second microsecond offsets don't miss the current minute run
+    now_check = now_utc + timedelta(seconds=10)
 
     with SessionLocal() as db:
 
@@ -101,10 +103,10 @@ def check_all_reminders():
                     ]
                 ),
                 or_(
-                    Task.reminder_at <= now_utc,
+                    Task.reminder_at <= now_check,
                     and_(
                         Task.reminder_at.is_(None),
-                        Task.due_date <= now_utc,
+                        Task.due_date <= now_check,
                     ),
                 ),
             )
@@ -127,8 +129,12 @@ def check_all_reminders():
                 if not task.reminder_sent:
                     should_send = True
             else:
-                # For recurring/overdue tasks, remind at most once every 24 hours
-                if not task.last_reminder_sent_at or (now_utc - task.last_reminder_sent_at).total_seconds() >= 86400:
+                # For recurring/overdue tasks, remind based on interval with a 5-60s grace period
+                delay = 86340 # slightly less than 24h
+                # if task.recurrence_interval == TaskRecurrence.TESTING_SEC:
+                #     delay = 55
+
+                if not task.last_reminder_sent_at or (now_utc - task.last_reminder_sent_at).total_seconds() >= delay:
                     should_send = True
                     email_title = "Recurring Task Reminder"
                     email_subject = f"Overdue Task: {task.title}"

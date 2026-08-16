@@ -31,6 +31,7 @@ class TaskRecurrence(str, Enum):
     DAILY = "DAILY"
     WEEKLY = "WEEKLY"
     MONTHLY = "MONTHLY"
+    # TESTING_SEC = "TESTING_SEC"
 
 
 class TaskStatus(str, Enum):
