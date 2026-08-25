@@ -1,8 +1,12 @@
+# scheduler_tasks.py
+
 from datetime import datetime, timezone, timedelta
-import pytz
-from sqlalchemy import select, or_, and_, func
-from sqlalchemy.orm import joinedload
+from dateutil.relativedelta import relativedelta
 import logging
+import pytz
+
+from sqlalchemy import select, or_, func
+from sqlalchemy.orm import joinedload
 
 from database_sync import SessionLocal
 from models.models import User
@@ -10,19 +14,20 @@ from models.journal import Journal
 from models.tasks import Task, TaskStatus, TaskRecurrence
 from services.email import send_reminder_email
 
+
 logger = logging.getLogger(__name__)
 
 
 def check_all_reminders():
     now_utc = datetime.now(timezone.utc)
-    # Add a 10s grace window so sub-second microsecond offsets don't miss the current minute run
+    # Small grace window because APScheduler runs once per minute.
     now_check = now_utc + timedelta(seconds=10)
 
     with SessionLocal() as db:
 
-        # -------------------------
-        # Journal Reminders
-        # -------------------------
+        # ============================================================
+        # Journal reminders
+        # ============================================================
         users = db.execute(
             select(User).where(
                 User.journal_reminder_active.is_(True),
@@ -34,39 +39,28 @@ def check_all_reminders():
             try:
                 tz = pytz.timezone(user.timezone or "Asia/Kolkata")
                 local_now = now_utc.astimezone(tz)
-
                 time_val = user.journal_reminder_time
+
                 if isinstance(time_val, str):
-                    time_val = datetime.strptime(
-                        time_val[:5], "%H:%M"
-                    ).time()
+                    time_val = datetime.strptime(time_val[:5], "%H:%M").time()
 
-                reminder_dt = tz.localize(
-                    datetime.combine(local_now.date(), time_val)
-                )
+                reminder_dt = tz.localize(datetime.combine(local_now.date(), time_val))
 
-                if local_now < reminder_dt:
-                    continue
-
-                if user.last_journal_reminder_date == local_now.date():
+                if local_now < reminder_dt or user.last_journal_reminder_date == local_now.date():
                     continue
 
                 journal_today = db.execute(
                     select(Journal).where(
                         Journal.user_id == user.id,
                         or_(
-                            func.date(Journal.date)
-                            == local_now.date(),
-                            func.date(Journal.created_at)
-                            == local_now.date(),
+                            func.date(Journal.date) == local_now.date(),
+                            func.date(Journal.created_at) == local_now.date(),
                         ),
                     )
                 ).scalars().first()
 
                 if journal_today:
-                    user.last_journal_reminder_date = (
-                        local_now.date()
-                    )
+                    user.last_journal_reminder_date = local_now.date()
                     continue
 
                 send_reminder_email(
@@ -78,81 +72,69 @@ def check_all_reminders():
                     icon="📓",
                 )
 
-                user.last_journal_reminder_date = (
-                    local_now.date()
-                )
+                user.last_journal_reminder_date = local_now.date()
 
             except Exception:
-                logger.exception(
-                    "[Journal] Error preparing reminder for user %s",
-                    user.id,
-                )
+                logger.exception("[Journal] Error for user %s", user.id)
 
-        # -------------------------
-        # Task Reminders
-        # -------------------------
+        # ============================================================
+        # Task reminders
+        # ============================================================
+        # reminder_at is the reminder time for THIS task occurrence.
+        # It does NOT move forward when the reminder is sent.
+        #
+        # A recurring task stays active until the user completes it.
+        # complete_task() then creates the next occurrence.
         tasks = db.execute(
-            select(Task)
-            .options(joinedload(Task.user))
-            .where(
+            select(Task).options(joinedload(Task.user)).where(
                 Task.is_archived.is_(False),
-                Task.status.notin_(
-                    [
-                        TaskStatus.COMPLETED,
-                        TaskStatus.CANCELLED,
-                    ]
-                ),
-                or_(
-                    Task.reminder_at <= now_check,
-                    and_(
-                        Task.reminder_at.is_(None),
-                        Task.due_date <= now_check,
-                    ),
-                ),
+                Task.status.notin_([
+                    TaskStatus.COMPLETED,
+                    TaskStatus.CANCELLED,
+                ]),
+                Task.reminder_at.is_not(None),
+                Task.reminder_at <= now_check,
             )
         ).scalars().all()
 
         for task in tasks:
             if not task.user:
-                logger.warning(
-                    "[Task] Task #%s has no user",
-                    task.id,
+                logger.warning("[Task] Task #%s has no user", task.id)
+                continue
+
+            # Non-recurring tasks: send once only (reminder_at is never advanced).
+            if task.recurrence_interval == TaskRecurrence.NONE:
+                if task.last_reminder_sent_at is not None:
+                    continue
+
+            recurring = task.recurrence_interval != TaskRecurrence.NONE
+
+            try:
+                send_reminder_email(
+                    task.user.email,
+                    f"{'Recurring Task Reminder' if recurring else 'Task Reminder'}: {task.title}",
+                    "Recurring Task Reminder" if recurring else "Task Reminder",
+                    task.title,
+                    task.description or "You have a task that requires your attention.",
+                    icon="🚨" if recurring else "✅",
+                    task_id=task.uuid,
                 )
-                continue
 
-            is_recurring = task.recurrence_interval != TaskRecurrence.NONE
-            should_send = False
-            email_subject = f"Task Reminder: {task.title}"
-            email_title = "Task Reminder"
-            
-            if not is_recurring:
-                if not task.reminder_sent:
-                    should_send = True
-            else:
-                # For recurring/overdue tasks, remind based on interval with a 5-60s grace period
-                delay = 86340 # slightly less than 24h
-                # if task.recurrence_interval == TaskRecurrence.TESTING_SEC:
-                #     delay = 55
+                task.last_reminder_sent_at = now_utc
 
-                if not task.last_reminder_sent_at or (now_utc - task.last_reminder_sent_at).total_seconds() >= delay:
-                    should_send = True
-                    email_title = "Recurring Task Reminder"
-                    email_subject = f"Overdue Task: {task.title}"
+                # Advance reminder_at to the next occurrence so the task won't
+                # appear in the query again until the correct future time.
+                # The SQL condition (reminder_at <= now_check) is now the sole gate.
+                if task.recurrence_interval == TaskRecurrence.DAILY:
+                    task.reminder_at += timedelta(days=1)
+                elif task.recurrence_interval == TaskRecurrence.WEEKLY:
+                    task.reminder_at += timedelta(weeks=1)
+                elif task.recurrence_interval == TaskRecurrence.MONTHLY:
+                    task.reminder_at += relativedelta(months=1)
 
-            if not should_send:
-                continue
-
-            send_reminder_email(
-                task.user.email,
-                email_subject,
-                email_title,
-                task.title,
-                task.description or "You have a task that requires your attention.",
-                icon="🚨" if is_recurring else "✅",
-                task_id=task.uuid,
-            )
-
-            task.reminder_sent = True
-            task.last_reminder_sent_at = now_utc
+            except Exception:
+                # If email fails, reminder_at and last_reminder_sent_at are not
+                # updated, so the next scheduler run will retry.
+                logger.exception("[Task] Error sending reminder for task %s", task.id)
 
         db.commit()

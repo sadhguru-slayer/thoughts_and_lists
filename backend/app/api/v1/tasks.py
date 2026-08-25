@@ -1,10 +1,11 @@
 from datetime import datetime, timezone, timedelta
+from dateutil.relativedelta import relativedelta
 from math import ceil
 from typing import List
 from uuid import UUID
 
 from fastapi import HTTPException, Path, Depends, APIRouter, Query
-from sqlalchemy import func, select, or_
+from sqlalchemy import case, func, nullslast, select, or_
 
 from core.dependencies import db_session
 from core.config import oauth2_scheme
@@ -76,6 +77,16 @@ async def get_tasks(
     count_query = select(func.count(Task.id)).where(*base_filter)
     total = (await db.scalar(count_query)) or 0
 
+    # Smart sort:
+    # 1. Overdue / upcoming incomplete tasks with a due date (soonest first)
+    # 2. Incomplete tasks without a due date (newest first)
+    # 3. Completed / cancelled tasks last (most recently completed first)
+    completion_group = case(
+        (Task.status.in_([TaskStatus.COMPLETED, TaskStatus.CANCELLED]), 2),
+        (Task.due_date.is_(None), 1),
+        else_=0,
+    )
+
     query = (
         select(
             Task.uuid,
@@ -88,7 +99,11 @@ async def get_tasks(
             Task.recurrence_interval,
         )
         .where(*base_filter)
-        .order_by(Task.position.asc())
+        .order_by(
+            completion_group.asc(),
+            nullslast(Task.due_date.asc()),
+            Task.created_at.desc(),
+        )
         .offset((page - 1) * per_page)
         .limit(per_page)
     )
@@ -236,34 +251,40 @@ async def delete_task(
         "message": "Task deleted successfully."
     }
 
+
 async def complete_task(db: db_session, task_uuid: UUID, user: UserOut):
     task = await get_task(db, task_uuid, user)
 
+    # Recurring tasks create their NEXT occurrence only when the current
+    # occurrence is actually completed. This gives every occurrence its
+    # own task record and preserves completion history.
     if task.recurrence_interval in (
-        TaskRecurrence.DAILY, 
-        TaskRecurrence.WEEKLY, 
-        TaskRecurrence.MONTHLY, 
-        # TaskRecurrence.TESTING_SEC
+        TaskRecurrence.DAILY,
+        TaskRecurrence.WEEKLY,
+        TaskRecurrence.MONTHLY,
     ):
         new_due_date = None
         new_reminder_at = None
-        
-        delta = None
-        if task.recurrence_interval == TaskRecurrence.DAILY:
-            delta = timedelta(days=1)
-        elif task.recurrence_interval == TaskRecurrence.WEEKLY:
-            delta = timedelta(weeks=1)
-        elif task.recurrence_interval == TaskRecurrence.MONTHLY:
-            delta = timedelta(days=30)
-        # elif task.recurrence_interval == TaskRecurrence.TESTING_SEC:
-        #     delta = timedelta(seconds=60)
-            
-        if delta:
-            if task.due_date:
-                new_due_date = task.due_date + delta
-            if task.reminder_at:
-                new_reminder_at = task.reminder_at + delta
 
+        if task.recurrence_interval == TaskRecurrence.DAILY:
+            if task.due_date:
+                new_due_date = task.due_date + timedelta(days=1)
+            if task.reminder_at:
+                new_reminder_at = task.reminder_at + timedelta(days=1)
+
+        elif task.recurrence_interval == TaskRecurrence.WEEKLY:
+            if task.due_date:
+                new_due_date = task.due_date + timedelta(weeks=1)
+            if task.reminder_at:
+                new_reminder_at = task.reminder_at + timedelta(weeks=1)
+
+        elif task.recurrence_interval == TaskRecurrence.MONTHLY:
+            # relativedelta preserves calendar months correctly
+            # (e.g. Jan 31 -> appropriate next-month date).
+            if task.due_date:
+                new_due_date = task.due_date + relativedelta(months=1)
+            if task.reminder_at:
+                new_reminder_at = task.reminder_at + relativedelta(months=1)
 
         new_task = Task(
             title=task.title,
@@ -272,10 +293,15 @@ async def complete_task(db: db_session, task_uuid: UUID, user: UserOut):
             due_date=new_due_date,
             reminder_at=new_reminder_at,
             reminder_sent=False,
+            last_reminder_sent_at=None,
             recurrence_interval=task.recurrence_interval,
             user_id=user.id,
         )
+
         db.add(new_task)
+
+        # The current occurrence is no longer recurring; the new task
+        # owns the next occurrence.
         task.recurrence_interval = TaskRecurrence.NONE
 
     task.status = TaskStatus.COMPLETED
