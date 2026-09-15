@@ -40,6 +40,8 @@ class Note(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     notebook_id: Mapped[int] = mapped_column(Integer, ForeignKey("notebooks.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    is_pinned: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    is_starred: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     
     notebook: Mapped["Notebook"] = relationship("Notebook", back_populates="notes")
     user: Mapped["User"] = relationship("User", back_populates="notes")

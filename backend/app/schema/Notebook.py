@@ -15,11 +15,15 @@ class NoteCreate(NoteBase):
 class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
+    is_pinned: Optional[bool] = None
+    is_starred: Optional[bool] = None
 
 class NoteOut(NoteBase):
     uuid: UUID
     notebook_id: int
     user_id: int
+    is_pinned: bool
+    is_starred: bool
     created_at: datetime
     updated_at: datetime
     

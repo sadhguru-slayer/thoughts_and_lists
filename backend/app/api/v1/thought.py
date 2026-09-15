@@ -336,6 +336,8 @@ async def move_thought_to_notebook(
     new_note = Note(
         title=thought.title,
         content=thought.content,
+        is_pinned=thought.is_pinned,
+        is_starred=thought.is_starred,
         notebook_id=target_notebook.id,
         user_id=user.id
     )

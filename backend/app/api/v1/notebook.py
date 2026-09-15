@@ -223,9 +223,12 @@ async def move_note(
 
     # If target_notebook_uuid is None, move note to Quick Notes (Thought)
     if not payload.target_notebook_uuid:
+        from models.models import Thought
         new_thought = Thought(
             title=db_note.title,
             content=db_note.content,
+            is_pinned=db_note.is_pinned,
+            is_starred=db_note.is_starred,
             user_id=user.id
         )
         db.add(new_thought)
