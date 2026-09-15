@@ -304,3 +304,44 @@ async def update_thought_orders(
             
     await db.commit()
     return {"message": "Thought orders updated successfully"}
+
+from models.notebook import Notebook, Note
+from schema.Notebook import MoveThoughtRequest
+
+@app.post("/thoughts/{thought_uuid}/move-to-notebook")
+async def move_thought_to_notebook(
+    payload: MoveThoughtRequest,
+    db: db_session,
+    thought_uuid: UUID = Path(...),
+    token: str = Depends(oauth2_scheme)
+):
+    user = await get_current_user(db, token)
+    if not user:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    result = await db.execute(
+        select(models.Thought).where(models.Thought.uuid == thought_uuid, models.Thought.user_id == user.id)
+    )
+    thought = result.scalar_one_or_none()
+    if not thought:
+        raise HTTPException(status_code=404, detail="Thought not found")
+
+    target_res = await db.execute(
+        select(Notebook).where(Notebook.uuid == str(payload.target_notebook_uuid), Notebook.user_id == user.id)
+    )
+    target_notebook = target_res.scalar_one_or_none()
+    if not target_notebook:
+        raise HTTPException(status_code=404, detail="Target notebook not found")
+
+    new_note = Note(
+        title=thought.title,
+        content=thought.content,
+        notebook_id=target_notebook.id,
+        user_id=user.id
+    )
+    db.add(new_note)
+    await db.delete(thought)
+    await db.commit()
+    await db.refresh(new_note)
+
+    return {"message": "Thought moved to notebook", "type": "note", "uuid": str(new_note.uuid), "notebook_uuid": str(target_notebook.uuid)}

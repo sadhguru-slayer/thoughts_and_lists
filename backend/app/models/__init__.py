@@ -3,3 +3,4 @@
 from .models import User
 from .tasks import Task
 from .journal import Journal, SectionTemplate, SectionField, JournalSection, FieldValue
+from .notebook import Notebook, Note

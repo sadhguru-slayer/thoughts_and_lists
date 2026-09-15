@@ -94,6 +94,18 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    notebooks = relationship(
+        "Notebook",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    notes = relationship(
+        "Note",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
     otp_code: Mapped[str | None] = mapped_column(String, nullable=True)
     otp_expiry: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

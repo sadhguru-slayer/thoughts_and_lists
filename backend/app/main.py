@@ -12,6 +12,7 @@ from api.v1.journal import app as journalRouter
 from api.v1.tasks import app as taskRouter
 from api.v1.dashboard import app as dashboardRouter
 from api.v1.dev import app as devRouter
+from api.v1.notebook import router as notebookRouter
 load_dotenv()
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
@@ -94,6 +95,12 @@ app.include_router(
 )
 
 app.include_router(
+    notebookRouter,
+    prefix="/api/v1",
+    tags=["Notebook"]
+)
+
+app.include_router(
     dashboardRouter,
     prefix="/api/v1",
     tags=["Dashboard"]
@@ -105,3 +112,5 @@ app.include_router(
     prefix="/api/v1",
     tags=["Dev"],
 )
+
+# Force reload
