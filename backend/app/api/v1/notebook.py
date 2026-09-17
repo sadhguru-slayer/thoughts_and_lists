@@ -113,7 +113,12 @@ async def delete_notebook(
     if not user:
         raise HTTPException(status_code=404, detail="Invalid token")
 
-    result = await db.execute(select(Notebook).where(Notebook.uuid == str(uuid), Notebook.user_id == user.id))
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(Notebook)
+        .options(selectinload(Notebook.notes))
+        .where(Notebook.uuid == str(uuid), Notebook.user_id == user.id)
+    )
     db_notebook = result.scalar_one_or_none()
     if not db_notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
