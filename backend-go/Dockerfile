@@ -14,21 +14,18 @@ RUN go mod download
 
 # Copy the rest of the source and build a static binary.
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN CGO_ENABLED=0 GOOS=linux \
     go build -ldflags="-s -w" -o /app ./cmd/server
 
 # ── Stage 2: run ─────────────────────────────────────────────────────────────
-# Scratch is an empty base image — the final container is just our binary.
-# This makes the image ~10 MB vs ~300 MB for a python:slim image.
-FROM scratch
+# Alpine gives us a tiny ~5MB runtime with /bin/sh and wget for healthchecks.
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
 
 # Copy the static binary from the builder stage
 COPY --from=builder /app /app
 
-# ca-certificates are needed for TLS connections (SMTP, Redis TLS, etc.)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+EXPOSE 8000
 
-EXPOSE 8001
-
-# Run the binary directly — no shell needed
 ENTRYPOINT ["/app"]
