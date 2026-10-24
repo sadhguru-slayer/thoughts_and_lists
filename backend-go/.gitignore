@@ -9,7 +9,7 @@ bin/
 *.dll
 *.so
 *.dylib
-server
+/server
 
 # OS files
 .DS_Store

@@ -23,31 +23,25 @@ jobs:
             set -e
 
             echo "Connected to OCI server"
-            whoami
-            pwd
-
-            echo "Moving to project directory"
             cd ~/thoughts_and_lists
-
-            echo "Current branch:"
-            git branch
-
             echo "Fetching latest code"
             git fetch origin
-
-            echo "Resetting server code to master"
             git reset --hard origin/master
-
-            echo "Latest commit:"
-            git log -1 --oneline
-
-            echo "Moving to backend directory"
-            cd backend
-
-            echo "Building containers"
+            echo "Stopping old Python backend (if running)"
+            if [ -d "backend" ]; then
+              cd backend
+              docker compose -f docker-compose.dev.yaml down || true
+              cd ..
+            fi
+            echo "Moving to Go backend directory"
+            cd backend-go
+            echo "Ensuring .env exists"
+            if [ ! -f .env ] && [ -f ../backend/.env ]; then
+              cp ../backend/.env .env
+              echo "Copied .env from backend to backend-go"
+            fi
+            echo "Building and starting Go backend container"
             docker compose -f docker-compose.dev.yaml up -d --build
-
-            echo "Running containers"
+            echo "Running containers:"
             docker compose -f docker-compose.dev.yaml ps
-
             echo "Deployment completed successfully"
