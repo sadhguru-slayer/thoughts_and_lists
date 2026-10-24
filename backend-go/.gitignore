@@ -1,0 +1,19 @@
+# Environment files
+.env
+*.env
+*.env.*
+
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+server
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Previews / scratch
+email_previews/

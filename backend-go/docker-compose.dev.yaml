@@ -1,0 +1,44 @@
+# docker-compose.dev.yaml — Go backend (development)
+#
+# Mirrors the Python backend's docker-compose.dev.yaml structure.
+#
+# The Go server runs on port 8001 so it can live alongside the Python
+# backend (port 8000) during the migration period.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yaml up --build
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 64m          # Go binary is tiny — this is very comfortable
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${PORT:-8000}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Shared Redis instance.
+  # If you already have a redis container from the Python stack running,
+  # you can remove this block and point REDIS_URL at that container instead.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 80mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 100m

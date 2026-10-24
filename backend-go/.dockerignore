@@ -1,0 +1,18 @@
+# .dockerignore — Go backend
+# Prevents unnecessary files from being sent to the Docker build context.
+
+# Version control
+.git
+.gitignore
+
+# Dev tooling
+.vscode
+.idea
+*.swp
+
+# Test artifacts
+*_test.go
+coverage.out
+
+# Don't ship the local .env — Docker Compose injects it via env_file
+.env
